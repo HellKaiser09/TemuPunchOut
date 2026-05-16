@@ -39,11 +39,13 @@ export class CombatScene extends Phaser.Scene {
         // Contador de esquiva
         this.countdownText = this.add.text(width / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5);
         this.countdownText.setVisible(false);
+        this.alertText = this.add.text(width / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
 
         this.pacienteHP = 150;
         this.nemesisHP = 100; 
         this.nemesisAttackDirection = "NINGUNA"; 
         this.pacienteBaseY = this.paciente.y;
+        this.lastDodgeDirection = "NINGUNA";
 
         this.nemesisTimer = this.time.addEvent({
             delay: 4500,
@@ -70,6 +72,7 @@ export class CombatScene extends Phaser.Scene {
 
     executeDodge(direction) {
         this.pacienteState = direction === "IZQUIERDA" ? "ESQUIVE_IZQ" : "ESQUIVE_DER";
+        this.lastDodgeDirection = direction;
         this.infoText.setText(`Estado: ESQUIVE ${direction}`);
 
         const offset = direction === "IZQUIERDA" ? -60 : 60;
@@ -101,55 +104,89 @@ export class CombatScene extends Phaser.Scene {
     }
 
     executePunch() {
-    if (this.tweens.isTweening(this.paciente) || this.nemesisHP <= 0) return;
+        // Bloqueamos si está animando, si el enemigo murió o si está recuperándose del golpe anterior
+        if (this.tweens.isTweening(this.paciente) || this.nemesisHP <= 0 || this.pacienteState === 'RECOVERY') return;
 
-    this.pacienteState = 'ATACANDO';
-    const damageDealt = 10;
-    this.infoText.setText(`Golpe lanzado (-${damageDealt} HP al nemesis)`);
+        this.pacienteState = 'ATACANDO';
+        
+        // 🔥 NUEVO: Probabilidad de bloqueo (25%). Mañana esto puede cambiar según el diálogo (ej. estaConfig.blockChance)
+        const blockChance = 0.25;
+        const isBlocked = Math.random() < blockChance;
 
-    // LÓGICA DE DAÑO AL NEMESIS
-    this.nemesisHP -= damageDealt;
-    const clampedEnemyHP = Math.max(0, this.nemesisHP);
-    this.nemesisHPBar.setSize((clampedEnemyHP / 100) * 250, 20);
+        if (isBlocked) {
+            // El enemigo bloquea el golpe
+            this.infoText.setText('¡Tu golpe fue bloqueado!');
+            this.alertText.setText('🛡️ ¡BLOQUEO!');
+            
+            // Feedback visual de bloqueo: se pone gris temporalmente
+            this.nemesis.setFillStyle(0x555555);
+            this.time.delayedCall(150, () => {
+                if (this.nemesisHP > 0 && this.nemesisState !== 'ATACANDO') {
+                    this.nemesis.setFillStyle(0x882222);
+                }
+                this.alertText.setText('');
+            });
+            
+            // Sacudida de cámara sutil por el choque de guardias
+            this.cameras.main.shake(50, 0.005);
 
-    // 🔥 NUEVO: FEEDBACK VISUAL EN EL ENEMIGO (Efecto de impacto)
-    this.cameras.main.shake(100, 0.01); // Agita la cámara (duración ms, intensidad)
-    this.nemesis.setFillStyle(0xffffff); // Se pone blanco un instante por el impacto
-    
-    this.tweens.add({
-        targets: this.nemesis,
-        scaleX: 1.1, // Se deforma lateralmente
-        scaleY: 0.9,
-        duration: 50,
-        yoyo: true,
-        onComplete: () => { if(this.nemesisHP > 0) this.nemesis.setFillStyle(0x882222); }
-    });
+        } else {
+            // GOLPE EXITOSO: Lógica original de daño
+            const damageDealt = 10;
+            this.infoText.setText(`Golpe lanzado (-${damageDealt} HP)`);
 
-    this.tweens.add({
-        targets: this.paciente,
-        y: this.pacienteBaseY - 40, 
-        duration: 80,
-        yoyo: true,
-        onComplete: () => {
-            this.pacienteState = 'NEUTRAL';
-            this.infoText.setText('Estado: NEUTRAL');
-            this.paciente.y = this.pacienteBaseY;
+            this.nemesisHP -= damageDealt;
+            const clampedNemesisHP = Math.max(0, this.nemesisHP);
+            this.nemesisHPBar.setSize((clampedNemesisHP / 100) * 250, 20);
 
-            // 🎬 NUEVO: CHECK DE VICTORIA CON TRANSICIÓN SUAVE (FADE OUT)
-            if (this.nemesisHP <= 0) {
-                this.nemesisTimer.destroy(); 
-                this.infoText.setText('¡Demonio derrotado! Yendo a descansar...');
-                
-                // Iniciamos fade out a negro (800ms)
-                this.cameras.main.fade(800, 0, 0, 0);
-                
-                // Esperamos a que la cámara termine de oscurecerse para cambiar de escena
-                this.cameras.main.once('camerafadeoutcomplete', () => {
-                    this.scene.start('DialogueScene');
-                });
-            }
+            // Feedback visual de daño
+            this.cameras.main.shake(100, 0.01);
+            this.nemesis.setFillStyle(0xffffff);
+            
+            this.tweens.add({
+                targets: this.nemesis,
+                scaleX: 1.1,
+                scaleY: 0.9,
+                duration: 50,
+                yoyo: true,
+                onComplete: () => { 
+                    if (this.nemesisHP > 0 && this.nemesisState !== 'ATACANDO') {
+                        this.nemesis.setFillStyle(0x882222); 
+                    }
+                }
+            });
         }
-    });
+
+        // El movimiento físico del paciente y el cooldown ocurren SIEMPRE (falles o aciertes el golpe)
+        this.tweens.add({
+            targets: this.paciente,
+            y: this.pacienteBaseY - 40, 
+            duration: 80,
+            yoyo: true,
+            onComplete: () => {
+                this.paciente.y = this.pacienteBaseY;
+
+                // Check de victoria
+                if (this.nemesisHP <= 0) {
+                    this.nemesisTimer.destroy();
+                    this.infoText.setText('¡Demonio derrotado! Yendo a descansar...');
+                    this.cameras.main.fade(800, 0, 0, 0);
+                    this.cameras.main.once('camerafadeoutcomplete', () => {
+                        this.scene.start('DialogueScene');
+                    });
+                    return;
+                }
+
+                // Fase de recuperación (Cooldown anti-spam)
+                this.pacienteState = 'RECOVERY';
+                this.infoText.setText('Recuperando guardia...');
+
+                this.time.delayedCall(300, () => {
+                    this.pacienteState = 'NEUTRAL';
+                    this.infoText.setText('Estado: NEUTRAL');
+                }, [], this);
+            }
+        });
 }
 
     startNemesisAttack() {
@@ -161,12 +198,12 @@ export class CombatScene extends Phaser.Scene {
 
         // TELEGRAFO: Cambia a Amarillo (Cuidado)
         this.nemesis.setFillStyle(0xeeee22);
-        this.infoText.setText(`¡ALERTA! Ataque por la ${this.nemesisAttackDirection}`);
+        this.alertText.setText(`¡ALERTA! Ataque por la ${this.nemesisAttackDirection}`);
 
         // Mostrar contador regresivo de esquiva
         this.countdownText.setVisible(true);
         let timeRemaining = 1500; // 1.5 segundos en ms
-        const countdownInterval = this.time.addEvent({
+        this.time.addEvent({
             delay: 100,
             repeat: 14,
             callback: () => {
@@ -207,12 +244,12 @@ export class CombatScene extends Phaser.Scene {
         let razonEvasion = "";
         
         // Si ataca por la IZQUIERDA, el paciente debió esquivar a la DERECHA
-        if (this.nemesisAttackDirection === 'IZQUIERDA' && this.pacienteState === 'ESQUIVE_DER') {
+        if (this.nemesisAttackDirection === 'IZQUIERDA' && this.lastDodgeDirection === 'DERECHA') {
             evadido = true;
             razonEvasion = "Esquive correcto (ataque IZQ → esquivó DER)";
         }
         // Si ataca por la DERECHA, el paciente debió esquivar a la IZQUIERDA
-        if (this.nemesisAttackDirection === 'DERECHA' && this.pacienteState === 'ESQUIVE_IZQ') {
+        if (this.nemesisAttackDirection === 'DERECHA' && this.lastDodgeDirection === 'IZQUIERDA') {
             evadido = true;
             razonEvasion = "Esquive correcto (ataque DER → esquivó IZQ)";
         }
@@ -244,6 +281,8 @@ export class CombatScene extends Phaser.Scene {
             this.nemesis.setFillStyle(0x882222); // Vuelve a su color base
             this.nemesisState = 'IDLE';
             this.nemesisAttackDirection = 'NINGUNA';
+            this.lastDodgeDirection = 'NINGUNA';
+            this.alertText.setText('');
             if (this.pacienteState === 'NEUTRAL') this.infoText.setText('Estado: NEUTRAL');
             
             // Check de derrota
