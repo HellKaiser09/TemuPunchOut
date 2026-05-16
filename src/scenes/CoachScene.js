@@ -2,7 +2,7 @@
 // Escena overlay entre rounds — muestra el coach y permite elegir un buff
 // Se lanza encima de CombatScene sin detenerla: scene.launch('CoachScene')
 
-import { BUFF_CATALOG } from './BuffSystem.js';
+import { BUFF_CATALOG } from '../systems/BuffSystem.js';
 
 const COLORS = {
   bg:         0x1a1a2e,
