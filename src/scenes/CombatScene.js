@@ -78,7 +78,7 @@ export class CombatScene extends Phaser.Scene {
     procesarGolpeJugador(tipo) {
         if (Math.random() < 0.20) {
             this.infoText.setText('¡Bloqueado por el Némesis!');
-            this.alertText.setText('🛡️ ¡BLOQUEO!');
+            this.alertText.setText('¡BLOQUEO!');
             this.nemesis.setFillStyle(0x555555);
             this.time.delayedCall(150, () => {
                 if (this.nemesis.hp > 0 && this.nemesis.state !== 'ATACANDO') this.nemesis.setFillStyle(0x882222);
@@ -134,74 +134,91 @@ export class CombatScene extends Phaser.Scene {
             }
         });
     }
+procesarGolpeNemesis(data = {}) {
+    if (this.paciente.hp <= 0) return;
 
-    procesarGolpeNemesis() {
-        if (this.nemesis.hp <= 0) return;
+    const { tipo = 'LATERAL', direccion = 'NINGUNA', dano = 10 } = data;
 
-        const colorAtaque = this.nemesis.attackDirection === 'IZQUIERDA' ? 0xff2200 : 0x2200ff;
-        this.nemesis.setFillStyle(colorAtaque);
+    // ── ESPECIAL — manejo separado (daño por tick) ────────────
+    if (tipo === 'ESPECIAL') {
+        this.paciente.hp = Math.max(0, this.paciente.hp - dano);
+        this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
+        this.cameras.main.shake(80, 0.01);
 
-        let evadido = false;
-        let bloqueado = false;
-        let razonEvasion = "";
-
-        if (this.nemesis.attackDirection === 'IZQUIERDA' && this.paciente.lastDodgeDirection === 'DERECHA') {
-            evadido = true;
-            razonEvasion = "¡Esquive Perfecto! (Ataque IZQ → Moviste DER)";
-        }
-        if (this.nemesis.attackDirection === 'DERECHA' && this.paciente.lastDodgeDirection === 'IZQUIERDA') {
-            evadido = true;
-            razonEvasion = "¡Esquive Perfecto! (Ataque DER → Moviste IZQ)";
-        }
-
-        if (this.paciente.state === 'AGACHADO') {
-            if (this.nemesis.attackType === 'ALTO') {
-                evadido = true;
-                razonEvasion = "¡Pasó por arriba! (Te agachaste de un golpe ALTO)";
-            } else {
-                evadido = false; 
-                console.log("[¡PUM!] El paciente se agachó ante un golpe bajo.");
-            }
-        }
-
-        if (this.paciente.state === 'BLOQUEANDO') {
-            bloqueado = true;
-        }
-
-        if (evadido) {
-            this.infoText.setText(`✓ ${razonEvasion}`);
-            console.log(`[EVADIDO] ${razonEvasion}`);
-        } else if (bloqueado) {
-            const chipDamage = 2;
-            this.paciente.hp -= chipDamage;
-            this.infoText.setText(`🛡️ Guardia firme (-${chipDamage} HP - Daño mitigado)`);
-            this.pacienteHPbar.setSize((Math.max(0, this.paciente.hp) / 150) * 250, 20);
-            this.cameras.main.shake(50, 0.005);
-        } else {
-            const fullDamage = 10;
-            this.paciente.hp -= fullDamage;
-            this.infoText.setText(`✗ ¡Golpe directo! (-${fullDamage} HP)`);
-            this.pacienteHPbar.setSize((Math.max(0, this.paciente.hp) / 150) * 250, 20);
-            this.cameras.main.shake(250, 0.025);
-            this.cameras.main.flash(100, 255, 0, 0);
-        }
-
-        this.time.delayedCall(300, () => {
-            this.nemesis.setFillStyle(0x882222);
-            this.nemesis.state = 'IDLE';
-            this.nemesis.attackDirection = 'NINGUNA';
-            this.paciente.lastDodgeDirection = 'NINGUNA';
-            this.alertText.setText('');
-            
-            if (this.paciente.state === 'NEUTRAL') this.infoText.setText('Estado: NEUTRAL');
-            
-            if (this.paciente.hp <= 0) {
-                console.log('[DERROTA] El paciente ha caído.');
-                this.terminarCombate(false);
-            }
-        });
+        if (this.paciente.hp <= 0) this.terminarCombate(false);
+        return;
     }
 
+    // ── LATERAL e IZQUIERDA/DERECHA ───────────────────────────
+    let evadido   = false;
+    let bloqueado = false;
+    let razon     = '';
+
+    if (tipo === 'LATERAL') {
+        // Esquive correcto: moverse al lado contrario
+        if (direccion === 'IZQUIERDA' && this.paciente.lastDodgeDirection === 'DERECHA') {
+            evadido = true;
+            razon   = '¡Esquive perfecto! (IZQ → moviste DER)';
+        }
+        if (direccion === 'DERECHA' && this.paciente.lastDodgeDirection === 'IZQUIERDA') {
+            evadido = true;
+            razon   = '¡Esquive perfecto! (DER → moviste IZQ)';
+        }
+        // Agachado no esquiva un golpe lateral
+        if (!evadido && this.paciente.state === 'AGACHADO') {
+            evadido = false;
+        }
+    }
+
+    if (tipo === 'ARRIBA') {
+        // Solo se esquiva agachándose
+        if (this.paciente.state === 'AGACHADO') {
+            evadido = true;
+            razon   = '¡Pasó por arriba! (te agachaste a tiempo)';
+        }
+        // Esquivar a los lados no sirve para golpe de arriba
+    }
+
+    // Guardia reduce daño en cualquier tipo
+    if (!evadido && this.paciente.state === 'BLOQUEANDO') {
+        bloqueado = true;
+    }
+
+    // ── Aplicar resultado ─────────────────────────────────────
+    if (evadido) {
+        this.infoText.setText(`✓ ${razon}`);
+
+    } else if (bloqueado) {
+        const chipDamage = 2;
+        this.paciente.hp = Math.max(0, this.paciente.hp - chipDamage);
+        this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
+        this.infoText.setText(`Guardia firme (-${chipDamage} HP)`);
+        this.cameras.main.shake(50, 0.005);
+
+    } else {
+        this.paciente.hp = Math.max(0, this.paciente.hp - dano);
+        this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
+        this.infoText.setText(`✗ ¡Golpe directo! (-${dano} HP)`);
+        this.cameras.main.shake(250, 0.025);
+        this.cameras.main.flash(100, 255, 0, 0);
+    }
+
+    // ── Limpieza ──────────────────────────────────────────────
+    this.time.delayedCall(300, () => {
+        this.nemesis.setFillStyle(0x882222);
+        this.paciente.lastDodgeDirection = 'NINGUNA';
+        this.alertText.setText('');
+
+        if (this.paciente.state === 'NEUTRAL') {
+            this.infoText.setText('Estado: NEUTRAL');
+        }
+
+        if (this.paciente.hp <= 0) {
+            console.log('[DERROTA] El paciente ha caído.');
+            this.terminarCombate(false);
+        }
+    });
+}
     terminarCombate(victoria) {
         this.nemesis.attackTimer.destroy();
 
@@ -229,11 +246,11 @@ export class CombatScene extends Phaser.Scene {
                 this.paciente.state = 'CINEMATIC';
 
                 const lineasResurreccion = [
-                    { speaker: 'patient', text: '¡Se acabó! Caíste... por fin saldrás de mi cabeza.' },
-                    { speaker: 'dr', text: '¿Eso crees? Míralo... no se está desvaneciendo. ¡Se está levantando con más fuerza!' },
+                    { speaker: 'patient', text: '¡Se acabó!, pensaba que me que me iba tomar de 6 a 7 rounds.' },
+                    { speaker: 'dr', text: '¿Eso crees? El servicio al cliente te está llamando.' },
                     { speaker: 'nemesis', text: 'Jajaja... No puedes borrarme con puños. ¡SOY TU PROPIA CULPA!' },
-                    { speaker: 'dr', text: '¡Paciente, escúchame! No lo niegues, acéptalo como parte de tu historia, ¡pero quítale el control de tu vida!' },
-                    { speaker: 'patient', text: 'Es verdad... eres mi pasado. Te acepto, pero ya NO me vas a dominar. ¡ÚLTIMO ASALTO!' }
+                    { speaker: 'dr', text: '¡Hey! No estudiaste para terminar ahí, puedes vencerlo.' },
+                    { speaker: 'patient', text: 'Es verdad... Solo necesito resistir un poco más y vencerme.' }
                 ];
 
                 this.cameras.main.fade(500, 0, 0, 0);
@@ -252,8 +269,8 @@ export class CombatScene extends Phaser.Scene {
                 this.paciente.state = 'CINEMATIC';
                 
                 const lineasVictoriaFinal = [
-                    { speaker: 'nemesis', text: 'No... puede... ser... Te estás... perdonando...' },
-                    { speaker: 'patient', text: 'Adiós, viejo fantasma. Hoy decido avanzar.' },
+                    { speaker: 'nemesis', text: 'No... puede... ser... Te estás... aceptando...' },
+                    { speaker: 'patient', text: 'Adiós, viejo. Creo que dejaré de tener tan poca confianza en mí mismo.' },
                     { speaker: 'system', text: '◈ ENHORABUENA: Has superado tus demonios internos.' }
                 ];
 
