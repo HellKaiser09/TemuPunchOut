@@ -29,7 +29,7 @@
     { "speaker": "dr",      "text": "Sí." },
     { "speaker": "patient", "text": "¡¡Tiene guantes de box!!" },
     { "speaker": "dr",      "text": "Claro, si no, no podria pelear. Es perfectamente normal." },
-    { "speaker": "dr",      "text": "Ahora escúcheme. Tengo un consejo para usted antes del siguiente round." },
+    { "speaker": "dr",      "text": "Ahora escúcheme. Tengo un consejo para usted antes del siguiente round." }
   ],
   "coachBuffResponses": {
     "autoestima": [
