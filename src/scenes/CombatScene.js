@@ -14,6 +14,9 @@ export class CombatScene extends Phaser.Scene {
         
         // Conservar vida del paciente si venimos del round anterior
         this.savedPatientHp  = data?.savedPatientHp ?? 150;
+
+        // 🔥 NUEVO: Recibir el buff que viene del Coach para este round
+        this.pendingBuff     = data?.pendingBuff ?? null; 
     }
 
     create() {
@@ -31,19 +34,17 @@ export class CombatScene extends Phaser.Scene {
         // CONFIGURACIÓN DE EVENTOS (Coach Buff)
         this.events.off('coach-buff-chosen'); // Limpiar escuchas viejas por seguridad
         this.events.on('coach-buff-chosen', (buffId) => {
-            this.buffSystem.apply(buffId); // Aplica el buff lógicamente
-            
-            // Avanzamos de round y reiniciamos el ring
+            // Avanzamos de round y le pasamos el ID del buff a la nueva escena reiniciada
             this.currentRound++;
             this.scene.restart({
                 currentRound: this.currentRound,
                 savedPatientHp: this.paciente.hp,
-                nemesisRevived: this.nemesisRevived
+                nemesisRevived: this.nemesisRevived,
+                pendingBuff: buffId // 🔥 Enviamos el buff para el siguiente round
             });
         });
 
-        // ── INTERFAZ DE USUARIO (UI) ──────────────────────────────
-        // Barra de Vida del Paciente
+        
         this.add.text(50, 30, `Paciente (Round ${this.currentRound}): `, { font: "16px Arial", fill: "#fff" });
         this.pacienteHPbar = this.add.rectangle(50, 55, 250, 20, 0x00ff00).setOrigin(0, 0.5);
         this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
@@ -54,7 +55,6 @@ export class CombatScene extends Phaser.Scene {
         // Inicializamos el tamaño visual del súper acumulado
         this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
 
-        // Barra de Vida del Némesis
         this.add.text(width - 300, 30, this.nemesisRevived ? 'NÉMESIS (💥 IRA CONSCIENTE)' : 'Némesis', { font: '16px Arial', fill: '#fff' });
         this.nemesisHPBar = this.add.rectangle(width - 300, 55, 250, 20, 0xff0000).setOrigin(0, 0.5);
 
@@ -68,29 +68,128 @@ export class CombatScene extends Phaser.Scene {
         this.infoText = this.add.text(width / 2, 20, 'Estado: NEUTRAL', { font: '18px monospace', fill: '#ffff00' }).setOrigin(0.5);
         this.countdownText = this.add.text(width / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
         this.alertText = this.add.text(width / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
+
+        // Panel visual mejorado para entender buffs/debuffs y stats del round
+        this.add.rectangle(width / 2, height - 95, 920, 100, 0x0b1526, 0.82).setStrokeStyle(2, 0x4f8bd8);
+        this.effectsTitle = this.add.text(width / 2 - 445, height - 135, 'ESTADO DE COMBATE', {
+            font: '14px monospace',
+            fill: '#7ed7ff',
+            fontStyle: 'bold'
+        }).setOrigin(0, 0.5);
+        this.buffLineText = this.add.text(width / 2 - 445, height - 112, 'BUFFS: ninguno', {
+            font: '13px monospace',
+            fill: '#6dff9d',
+            wordWrap: { width: 900 }
+        }).setOrigin(0, 0);
+        this.debuffLineText = this.add.text(width / 2 - 445, height - 90, 'DEBUFFS: ninguno', {
+            font: '13px monospace',
+            fill: '#ff8f8f',
+            wordWrap: { width: 900 }
+        }).setOrigin(0, 0);
+        this.statsLineText = this.add.text(width / 2 - 445, height - 68, 'STATS: --', {
+            font: '13px monospace',
+            fill: '#e5e7eb',
+            wordWrap: { width: 900 }
+        }).setOrigin(0, 0);
+
+        // 🔥 NUEVO: Si venimos de un cambio de round y hay un buff pendiente, lo aplicamos AHORA
+        if (this.pendingBuff) {
+            console.log(`[SISTEMA] Activando efectos de: ${this.pendingBuff} para el Round ${this.currentRound}`);
+            this.buffSystem.apply(this.pendingBuff);
+            this.pendingBuff = null;
+        }
+
+        this._refreshCombatUI();
     }
 
     update() {
         // Ejecuta el bucle de inputs del prota
         this.paciente.update();
+        this._refreshCombatUI();
     }
 
-    procesarGolpeJugador(tipo) {
-        if (Math.random() < 0.20) {
+    _getOnHitBonus() {
+        const onHitEffects = this.registry.get('onHitBuff') ?? [];
+        return onHitEffects
+            .filter(effect => effect.stat === 'courage' && effect.targetKey === 'self')
+            .reduce((acc, effect) => acc + effect.value, 0);
+    }
+
+    _refreshCombatUI() {
+        if (!this.buffLineText || !this.debuffLineText || !this.statsLineText || !this.buffSystem || !this.paciente || !this.nemesis) return;
+
+        const active = this.buffSystem.getActiveBuffs();
+        const toLabel = (mod) => {
+            const side = mod.targetKey === 'enemy' ? 'NEMESIS' : 'PACIENTE';
+            const rounds = typeof mod.rounds === 'number' ? `${mod.rounds}r` : 'inst';
+            if (mod.type === 'immunity') return `${side}:inmune(${mod.value}, ${rounds})`;
+            if (mod.type === 'block') return `${side}:bloquea(${mod.value}, ${rounds})`;
+            if (mod.type === 'on_hit') return `${side}:on_hit(${rounds})`;
+            const stat = mod.effect?.stat ?? 'stat';
+            return `${side}:${stat}(${rounds})`;
+        };
+
+        const buffMods = active.filter(mod => mod.sourceTag !== 'debuff');
+        const debuffMods = active.filter(mod => mod.sourceTag === 'debuff' || mod.targetKey === 'enemy');
+        const buffLine = buffMods.length ? buffMods.map(toLabel).join(' | ') : 'ninguno';
+        const debuffLine = debuffMods.length ? debuffMods.map(toLabel).join(' | ') : 'ninguno';
+
+        this.buffLineText.setText(`BUFFS: ${buffLine}`);
+        this.debuffLineText.setText(`DEBUFFS: ${debuffLine}`);
+        this.statsLineText.setText(
+            `STATS: Daño Némesis ${this.nemesis.damage} | Crit Paciente ${this.paciente.critDamage}% | Bonus energía por golpe +${this._getOnHitBonus()}% | Bloqueo manipulación ${this.buffSystem.isAbilityBlocked('manipulacion') ? 'SI' : 'NO'}`
+        );
+    }
+
+procesarGolpeJugador(tipo) {
+        const bloqueandoPorVentana = this.nemesis.state === 'ATACANDO';
+        const blockChance = bloqueandoPorVentana ? 0.70 : 0.32;
+
+        if (Math.random() < blockChance) {
             this.infoText.setText('¡Bloqueado por el Némesis!');
             this.alertText.setText('¡BLOQUEO!');
             this.nemesis.setFillStyle(0x555555);
+            console.log(`[DIFFICULTY] Bloqueo enemigo (${Math.round(blockChance * 100)}%) durante ${bloqueandoPorVentana ? 'ventana de ataque' : 'neutral'}`);
             this.time.delayedCall(150, () => {
                 if (this.nemesis.hp > 0 && this.nemesis.state !== 'ATACANDO') this.nemesis.setFillStyle(0x882222);
                 this.alertText.setText('');
             });
         } else {
-            const damage = (tipo.includes('BAJO')) ? 8 : 12;
-            this.nemesis.hp -= damage;
-            this.infoText.setText(`¡Golpe ${tipo}! (-${damage} HP)`);
+            let damageCalculado = (tipo.includes('BAJO')) ? 8 : 12;
             
-            // Incrementa y redimensiona la barra de Súper perfectamente
-            this.paciente.superMeter = Math.min(100, this.paciente.superMeter + 10);
+            // 🔥 NUEVO: Efecto de la carta 'Vulnerabilidad' (GOLPES CRÍTICOS)
+            let esCritico = false;
+            if (this.paciente.critDamage > 0 && Math.random() < 0.35) { // 35% de probabilidad de crítico si el buff está activo
+                const extraDamage = Math.round(damageCalculado * (this.paciente.critDamage / 100));
+                damageCalculado += extraDamage;
+                esCritico = true;
+            }
+
+            // Dentro de procesarGolpeJugador (Caso golpe exitoso)
+            console.log(`[BUFF CHECK] ¿Paciente tiene Multiplicador Crítico?: ${this.paciente.critDamage}%`);
+            console.log(`[DAMAGE CHECK] Daño real aplicado al Némesis: ${damageCalculado}`);
+
+            this.nemesis.hp -= damageCalculado;
+            
+            if (esCritico) {
+                this.infoText.setText(`💥 ¡CRÍTICO! Golpe ${tipo} (-${damageCalculado} HP)`);
+                this.alertText.setText('💥 CRÍTICO 💥');
+                this.time.delayedCall(600, () => this.alertText.setText(''));
+            } else {
+                this.infoText.setText(`¡Golpe ${tipo}! (-${damageCalculado} HP)`);
+            }
+            
+            // 🔥 NUEVO: Efecto 'on_hit' del BuffSystem (Cargar barra de súper extra con 'courage')
+            let bonoEnergiaExtra = 0;
+            const onHitEffects = this.registry.get('onHitBuff') ?? [];
+            onHitEffects.forEach(effect => {
+                if (effect.stat === 'courage' && (effect.targetKey === 'self' || effect.target === this.paciente)) {
+                    bonoEnergiaExtra += effect.value; // Te da +5% de energía extra por golpe asestado
+                }
+            });
+
+            // Incrementa y redimensiona la barra de Súper sumando el bono por valentía
+            this.paciente.superMeter = Math.min(100, this.paciente.superMeter + 10 + bonoEnergiaExtra);
             this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
 
             this.nemesisHPBar.setSize((Math.max(0, this.nemesis.hp) / 100) * 250, 20);

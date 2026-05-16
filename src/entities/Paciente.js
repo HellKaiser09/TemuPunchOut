@@ -10,6 +10,8 @@ export class Paciente extends Phaser.GameObjects.Rectangle {
         this.baseY = y;
         this.state = "NEUTRAL";
         this.lastDodgeDirection = "NINGUNA";
+        this.critDamage = 0; 
+        this.courage = 0;
 
         this.punchCooldown = false;
         this.punchCooldownMs = 350;
