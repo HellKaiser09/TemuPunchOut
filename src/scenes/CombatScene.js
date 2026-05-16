@@ -1,295 +1,271 @@
+import { Paciente } from '../entities/Paciente.js';
+import { Nemesis } from '../entities/Nemesis.js';
+import { BuffSystem } from '../systems/BuffSystem.js';
+
 export class CombatScene extends Phaser.Scene {
     constructor() {
         super({ key: 'CombatScene' });
     }
 
+    init(data) {
+        // Si venimos de DialogueScene tras la resurrección, cargamos los datos guardados
+        this.currentRound   = data?.currentRound ?? 1;
+        this.nemesisRevived  = data?.nemesisRevived ?? false;
+        
+        // Conservar vida del paciente si venimos del round anterior
+        this.savedPatientHp  = data?.savedPatientHp ?? 150;
+    }
+
     create() {
-        console.log('La CombatScene ya esta cargando::::::');
         this.cameras.main.fadeIn(500, 0, 0, 0);
-
-
-        // Primero vamos a cargar las dimensiones que se sacaron del config
         const width = this.sys.game.config.width;
         const height = this.sys.game.config.height;
 
-        //Creamos los sprites provisionales para probar que sirven las cosas
-        this.nemesis = this.add.rectangle(width / 2, height / 2 - 50, 200, 250, 0x882222);
-        this.paciente = this.add.rectangle(width / 2, height - 120, 120, 180, 0x224488);
+        // INSTANCIAR ENTIDADES MODULARES
+        this.nemesis = new Nemesis(this, width / 2, height / 2 - 50);
+        this.paciente = new Paciente(this, width / 2, height - 120);
+        this.paciente.hp = this.savedPatientHp;
 
-        //ESTO ES LA INTERFAZ DEL JUEGO(TEMPORAL)
-        this.add.text(50, 30, "Diseñador: ", { font: "16px Arial", fill: "#fff" });
+        this.buffSystem = new BuffSystem(this, this.paciente, this.nemesis);
+
+        // CONFIGURACIÓN DE EVENTOS (Coach Buff)
+        this.events.off('coach-buff-chosen'); // Limpiar escuchas viejas por seguridad
+        this.events.on('coach-buff-chosen', (buffId) => {
+            this.buffSystem.apply(buffId); // Aplica el buff lógicamente
+            
+            // Avanzamos de round y reiniciamos el ring
+            this.currentRound++;
+            this.scene.restart({
+                currentRound: this.currentRound,
+                savedPatientHp: this.paciente.hp,
+                nemesisRevived: this.nemesisRevived
+            });
+        });
+
+        // ── INTERFAZ DE USUARIO (UI) ──────────────────────────────
+        // Barra de Vida del Paciente
+        this.add.text(50, 30, `Paciente (Round ${this.currentRound}): `, { font: "16px Arial", fill: "#fff" });
         this.pacienteHPbar = this.add.rectangle(50, 55, 250, 20, 0x00ff00).setOrigin(0, 0.5);
+        this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
 
-        this.add.text(width - 300, 30, 'nemesis', { font: '16px Arial', fill: '#fff' });
+        // 🔥 LA SOLUCIÓN ACÁ: Se volvió a agregar la barra de Súper que se había borrado
+        this.add.text(50, 85, "SÚPER:", { font: "12px monospace", fill: "#00ffff" });
+        this.superBar = this.add.rectangle(100, 92, 0, 10, 0x00ffff).setOrigin(0, 0.5);
+        // Inicializamos el tamaño visual del súper acumulado
+        this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
+
+        // Barra de Vida del Némesis
+        this.add.text(width - 300, 30, this.nemesisRevived ? 'NÉMESIS (💥 IRA CONSCIENTE)' : 'Némesis', { font: '16px Arial', fill: '#fff' });
         this.nemesisHPBar = this.add.rectangle(width - 300, 55, 250, 20, 0xff0000).setOrigin(0, 0.5);
 
-        // Configuracion de los inputs (aqui aun lo podemos modificar... checalo tu jesus para cambiarlo )
-        // Por ahora usamos las Flechas para esquivar/bloquear y Espacio para golpear
-        this.controls = this.input.keyboard.createCursorKeys();
-        // Tecla extra para el golpe por si quieren testearla
-        this.punchKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        // Si es la resurrección del Round 3, alteramos las propiedades del Némesis
+        if (this.nemesisRevived) {
+            this.nemesis.hp = 60; // Se levanta con menos vida pero más furioso
+            this.nemesis.attackTimer.delay = 2500; // ¡Ataca el doble de rápido!
+        }
 
-        //ESTADOS LOGICOS DE LOS PERSONAJES
-        this.pacienteState = "NEUTRAL"; // Estados posibles: NEUTRAL, ESQUIVE_IZQ, ESQUIVE_DER, BLOQUEO, ATACANDO
-        this.nemesisState = "IDLE"; // El ritmo del nemesis que cambia segun los dialogos
-
-        // Texto informativo en pantalla
+        // Textos informativos de estado y alertas
         this.infoText = this.add.text(width / 2, 20, 'Estado: NEUTRAL', { font: '18px monospace', fill: '#ffff00' }).setOrigin(0.5);
-
-        // Contador de esquiva
-        this.countdownText = this.add.text(width / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5);
-        this.countdownText.setVisible(false);
+        this.countdownText = this.add.text(width / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
         this.alertText = this.add.text(width / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
-
-        this.pacienteHP = 150;
-        this.nemesisHP = 100; 
-        this.nemesisAttackDirection = "NINGUNA"; 
-        this.pacienteBaseY = this.paciente.y;
-        this.lastDodgeDirection = "NINGUNA";
-
-        this.nemesisTimer = this.time.addEvent({
-            delay: 4500,
-            callback: this.startNemesisAttack,
-            callbackScope: this,
-            loop: true
-        });
     }
 
     update() {
-        //Manejos de los inputs y los estados del jugador osea la logica de los golpes y asi 
-        if (this.pacienteState === "NEUTRAL") {
-            if (this.controls.left.isDown) {
-                this.executeDodge("IZQUIERDA");
-            } else if (this.controls.right.isDown) {
-                this.executeDodge("DERECHA");
-            } else if (this.controls.down.isDown) {
-                this.executeBlock();
-            } else if (Phaser.Input.Keyboard.JustDown(this.punchKey)) {
-                this.executePunch();
-            }
-        }
+        // Ejecuta el bucle de inputs del prota
+        this.paciente.update();
     }
 
-    executeDodge(direction) {
-        this.pacienteState = direction === "IZQUIERDA" ? "ESQUIVE_IZQ" : "ESQUIVE_DER";
-        this.lastDodgeDirection = direction;
-        this.infoText.setText(`Estado: ESQUIVE ${direction}`);
-
-        const offset = direction === "IZQUIERDA" ? -60 : 60;
-
-        this.tweens.add({
-            targets: this.paciente,
-            x: (this.sys.game.config.width / 2) + offset,
-            duration: 150,
-            yoyo: true,
-            hold: 100,
-            onComplete: () => {
-                this.pacienteState = "NEUTRAL";
-                this.infoText.setText("Estado: NEUTRAL");
-            }
-        }); 
-    }
-
-    executeBlock() {
-        this.pacienteState = 'BLOQUEANDO';
-        this.infoText.setText('Estado: BLOQUEO');
-        this.paciente.setScale(1, 0.8); // Se "agacha" o encoge temporalmente
-
-        // Volver a neutral cuando suelte la tecla de flecha abajo
-        this.input.keyboard.once('keyup-DOWN', () => {
-            this.paciente.setScale(1, 1);
-            this.pacienteState = 'NEUTRAL';
-            this.infoText.setText('Estado: NEUTRAL');
-        });
-    }
-
-    executePunch() {
-        // Bloqueamos si está animando, si el enemigo murió o si está recuperándose del golpe anterior
-        if (this.tweens.isTweening(this.paciente) || this.nemesisHP <= 0 || this.pacienteState === 'RECOVERY') return;
-
-        this.pacienteState = 'ATACANDO';
-        
-        // 🔥 NUEVO: Probabilidad de bloqueo (25%). Mañana esto puede cambiar según el diálogo (ej. estaConfig.blockChance)
-        const blockChance = 0.25;
-        const isBlocked = Math.random() < blockChance;
-
-        if (isBlocked) {
-            // El enemigo bloquea el golpe
-            this.infoText.setText('¡Tu golpe fue bloqueado!');
+    procesarGolpeJugador(tipo) {
+        if (Math.random() < 0.20) {
+            this.infoText.setText('¡Bloqueado por el Némesis!');
             this.alertText.setText('🛡️ ¡BLOQUEO!');
-            
-            // Feedback visual de bloqueo: se pone gris temporalmente
             this.nemesis.setFillStyle(0x555555);
             this.time.delayedCall(150, () => {
-                if (this.nemesisHP > 0 && this.nemesisState !== 'ATACANDO') {
-                    this.nemesis.setFillStyle(0x882222);
-                }
+                if (this.nemesis.hp > 0 && this.nemesis.state !== 'ATACANDO') this.nemesis.setFillStyle(0x882222);
                 this.alertText.setText('');
             });
-            
-            // Sacudida de cámara sutil por el choque de guardias
-            this.cameras.main.shake(50, 0.005);
-
         } else {
-            // GOLPE EXITOSO: Lógica original de daño
-            const damageDealt = 10;
-            this.infoText.setText(`Golpe lanzado (-${damageDealt} HP)`);
+            const damage = (tipo.includes('BAJO')) ? 8 : 12;
+            this.nemesis.hp -= damage;
+            this.infoText.setText(`¡Golpe ${tipo}! (-${damage} HP)`);
+            
+            // Incrementa y redimensiona la barra de Súper perfectamente
+            this.paciente.superMeter = Math.min(100, this.paciente.superMeter + 10);
+            this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
 
-            this.nemesisHP -= damageDealt;
-            const clampedNemesisHP = Math.max(0, this.nemesisHP);
-            this.nemesisHPBar.setSize((clampedNemesisHP / 100) * 250, 20);
-
-            // Feedback visual de daño
-            this.cameras.main.shake(100, 0.01);
+            this.nemesisHPBar.setSize((Math.max(0, this.nemesis.hp) / 100) * 250, 20);
+            this.cameras.main.shake(80, 0.01);
             this.nemesis.setFillStyle(0xffffff);
             
             this.tweens.add({
                 targets: this.nemesis,
-                scaleX: 1.1,
-                scaleY: 0.9,
-                duration: 50,
-                yoyo: true,
-                onComplete: () => { 
-                    if (this.nemesisHP > 0 && this.nemesisState !== 'ATACANDO') {
-                        this.nemesis.setFillStyle(0x882222); 
-                    }
-                }
+                scaleX: 1.1, duration: 50, yoyo: true,
+                onComplete: () => { if (this.nemesis.hp > 0 && this.nemesis.state !== 'ATACANDO') this.nemesis.setFillStyle(0x882222); }
             });
+
+            if (this.nemesis.hp <= 0) this.terminarCombate(true);
         }
-
-        // El movimiento físico del paciente y el cooldown ocurren SIEMPRE (falles o aciertes el golpe)
-        this.tweens.add({
-            targets: this.paciente,
-            y: this.pacienteBaseY - 40, 
-            duration: 80,
-            yoyo: true,
-            onComplete: () => {
-                this.paciente.y = this.pacienteBaseY;
-
-                // Check de victoria
-                if (this.nemesisHP <= 0) {
-                    this.nemesisTimer.destroy();
-                    this.infoText.setText('¡Demonio derrotado! Yendo a descansar...');
-                    this.cameras.main.fade(800, 0, 0, 0);
-                    this.cameras.main.once('camerafadeoutcomplete', () => {
-                        this.scene.start('DialogueScene');
-                    });
-                    return;
-                }
-
-                // Fase de recuperación (Cooldown anti-spam)
-                this.pacienteState = 'RECOVERY';
-                this.infoText.setText('Recuperando guardia...');
-
-                this.time.delayedCall(300, () => {
-                    this.pacienteState = 'NEUTRAL';
-                    this.infoText.setText('Estado: NEUTRAL');
-                }, [], this);
-            }
-        });
-}
-
-    startNemesisAttack() {
-        if (this.nemesisState !== 'IDLE' || this.nemesisHP <= 0) return;
-
-        this.nemesisState = 'ATACANDO';
-        // Elige al azar si ataca por la izquierda o derecha
-        this.nemesisAttackDirection = Math.random() > 0.5 ? 'IZQUIERDA' : 'DERECHA';
-
-        // TELEGRAFO: Cambia a Amarillo (Cuidado)
-        this.nemesis.setFillStyle(0xeeee22);
-        this.alertText.setText(`¡ALERTA! Ataque por la ${this.nemesisAttackDirection}`);
-
-        // Mostrar contador regresivo de esquiva
-        this.countdownText.setVisible(true);
-        let timeRemaining = 1500; // 1.5 segundos en ms
-        this.time.addEvent({
-            delay: 100,
-            repeat: 14,
-            callback: () => {
-                timeRemaining -= 100;
-                const seconds = (timeRemaining / 1000).toFixed(1);
-                this.countdownText.setText(`⏱ ${seconds}s`);
-                
-                // Cambiar color según el tiempo
-                if (timeRemaining <= 300) {
-                    this.countdownText.setFill('#ff0000'); // Rojo si quedan menos de 0.3s
-                } else if (timeRemaining <= 600) {
-                    this.countdownText.setFill('#ffaa00'); // Naranja si quedan menos de 0.6s
-                } else {
-                    this.countdownText.setFill('#00ff00'); // Verde
-                }
-            }
-        });
-
-        // Ventana de reacción: en 1500ms se ejecuta el golpe físico
-        this.time.delayedCall(1500, () => {
-            this.countdownText.setVisible(false);
-            this.executeNemesisHit();
-        }, [], this);
     }
 
-    executeNemesisHit() {
-        if (this.nemesisHP <= 0) return;
+    procesarSuperJugador() {
+        this.nemesis.setFillStyle(0x00ffff);
+        this.cameras.main.flash(300, 0, 255, 255);
+        this.cameras.main.shake(500, 0.03);
 
-        // COLORES DIFERENTES SEGÚN DIRECCIÓN DEL ATAQUE
-        const colorIzquierda = 0xff2200; // Rojo puro (izquierda)
-        const colorDerecha = 0x2200ff;   // Azul puro (derecha)
-        const colorAtaque = this.nemesisAttackDirection === 'IZQUIERDA' ? colorIzquierda : colorDerecha;
-        
+        this.nemesis.hp -= 50;
+        this.nemesisHPBar.setSize((Math.max(0, this.nemesis.hp) / 100) * 250, 20);
+
+        this.tweens.add({
+            targets: this.paciente,
+            y: this.paciente.baseY - 80, 
+            scaleX: 1.3, 
+            duration: 200, 
+            yoyo: true,
+            onComplete: () => {
+                this.paciente.y = this.paciente.baseY;
+                this.paciente.setScale(1, 1);
+                if (this.nemesis.hp <= 0) {
+                    this.terminarCombate(true);
+                } else {
+                    this.nemesis.setFillStyle(0x882222);
+                    this.paciente.state = 'NEUTRAL'; 
+                    this.infoText.setText('Estado: NEUTRAL');
+                }
+            }
+        });
+    }
+
+    procesarGolpeNemesis() {
+        if (this.nemesis.hp <= 0) return;
+
+        const colorAtaque = this.nemesis.attackDirection === 'IZQUIERDA' ? 0xff2200 : 0x2200ff;
         this.nemesis.setFillStyle(colorAtaque);
 
-        // LÓGICA DE ESQUIVE MEJORADA CON ESTADOS LÓGICOS
         let evadido = false;
+        let bloqueado = false;
         let razonEvasion = "";
-        
-        // Si ataca por la IZQUIERDA, el paciente debió esquivar a la DERECHA
-        if (this.nemesisAttackDirection === 'IZQUIERDA' && this.lastDodgeDirection === 'DERECHA') {
+
+        if (this.nemesis.attackDirection === 'IZQUIERDA' && this.paciente.lastDodgeDirection === 'DERECHA') {
             evadido = true;
-            razonEvasion = "Esquive correcto (ataque IZQ → esquivó DER)";
+            razonEvasion = "¡Esquive Perfecto! (Ataque IZQ → Moviste DER)";
         }
-        // Si ataca por la DERECHA, el paciente debió esquivar a la IZQUIERDA
-        if (this.nemesisAttackDirection === 'DERECHA' && this.lastDodgeDirection === 'IZQUIERDA') {
+        if (this.nemesis.attackDirection === 'DERECHA' && this.paciente.lastDodgeDirection === 'IZQUIERDA') {
             evadido = true;
-            razonEvasion = "Esquive correcto (ataque DER → esquivó IZQ)";
+            razonEvasion = "¡Esquive Perfecto! (Ataque DER → Moviste IZQ)";
         }
-        if (this.pacienteState === 'BLOQUEANDO') {
-            evadido = true;
-            razonEvasion = "Bloqueó el ataque";
+
+        if (this.paciente.state === 'AGACHADO') {
+            if (this.nemesis.attackType === 'ALTO') {
+                evadido = true;
+                razonEvasion = "¡Pasó por arriba! (Te agachaste de un golpe ALTO)";
+            } else {
+                evadido = false; 
+                console.log("[¡PUM!] El paciente se agachó ante un golpe bajo.");
+            }
+        }
+
+        if (this.paciente.state === 'BLOQUEANDO') {
+            bloqueado = true;
         }
 
         if (evadido) {
             this.infoText.setText(`✓ ${razonEvasion}`);
-            console.log(`[ESQUIVA EXITOSA] ${razonEvasion} | Paciente HP: ${this.pacienteHP}/150`);
+            console.log(`[EVADIDO] ${razonEvasion}`);
+        } else if (bloqueado) {
+            const chipDamage = 2;
+            this.paciente.hp -= chipDamage;
+            this.infoText.setText(`🛡️ Guardia firme (-${chipDamage} HP - Daño mitigado)`);
+            this.pacienteHPbar.setSize((Math.max(0, this.paciente.hp) / 150) * 250, 20);
+            this.cameras.main.shake(50, 0.005);
         } else {
-            // ¡Se comió el golpe!
-            const damageDealt = 10;
-            this.pacienteHP -= damageDealt;
-            this.infoText.setText(`✗ ¡Golpe recibido! (-${damageDealt} HP)`);
-            console.log(`[GOLPE RECIBIDO] Daño: ${damageDealt} | Paciente HP: ${this.pacienteHP}/150`);
-            
-            // Actualizar barra de vida visual (Dividido entre 150 que es su HP Máximo real)
-            const clampedHP = Math.max(0, this.pacienteHP);
-            this.pacienteHPbar.setSize((clampedHP / 150) * 250, 20);
-            
-            // Flash rojo en la pantalla para dar feedback de daño
+            const fullDamage = 10;
+            this.paciente.hp -= fullDamage;
+            this.infoText.setText(`✗ ¡Golpe directo! (-${fullDamage} HP)`);
+            this.pacienteHPbar.setSize((Math.max(0, this.paciente.hp) / 150) * 250, 20);
+            this.cameras.main.shake(250, 0.025);
             this.cameras.main.flash(100, 255, 0, 0);
         }
 
-        // Resetear al nemesis a su estado normal después de 300ms del golpe
         this.time.delayedCall(300, () => {
-            this.nemesis.setFillStyle(0x882222); // Vuelve a su color base
-            this.nemesisState = 'IDLE';
-            this.nemesisAttackDirection = 'NINGUNA';
-            this.lastDodgeDirection = 'NINGUNA';
+            this.nemesis.setFillStyle(0x882222);
+            this.nemesis.state = 'IDLE';
+            this.nemesis.attackDirection = 'NINGUNA';
+            this.paciente.lastDodgeDirection = 'NINGUNA';
             this.alertText.setText('');
-            if (this.pacienteState === 'NEUTRAL') this.infoText.setText('Estado: NEUTRAL');
             
-            // Check de derrota
-            if (this.pacienteHP <= 0) {
-                console.log('[DERROTA] Paciente derrotado');
-                this.scene.start('EndScene');
+            if (this.paciente.state === 'NEUTRAL') this.infoText.setText('Estado: NEUTRAL');
+            
+            if (this.paciente.hp <= 0) {
+                console.log('[DERROTA] El paciente ha caído.');
+                this.terminarCombate(false);
             }
-        }, [], this);
+        });
+    }
+
+    terminarCombate(victoria) {
+        this.nemesis.attackTimer.destroy();
+
+        if (!victoria) {
+            this.cameras.main.fade(800, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+                this.scene.start('EndScene', { victoria: false });
+            });
+            return;
+        }
+
+        if (this.currentRound === 1 || this.currentRound === 2) {
+            this.paciente.state = 'CINEMATIC'; 
+            this.buffSystem.tickRound();
+
+            this.scene.launch('CoachScene', {
+                round: this.currentRound,
+                playerHp: this.paciente.hp,
+                playerMaxHp: this.paciente.maxHp,
+                playerEnergy: this.paciente.superMeter
+            });
+
+        } else if (this.currentRound === 3) {
+            if (!this.nemesisRevived) {
+                this.paciente.state = 'CINEMATIC';
+
+                const lineasResurreccion = [
+                    { speaker: 'patient', text: '¡Se acabó! Caíste... por fin saldrás de mi cabeza.' },
+                    { speaker: 'dr', text: '¿Eso crees? Míralo... no se está desvaneciendo. ¡Se está levantando con más fuerza!' },
+                    { speaker: 'nemesis', text: 'Jajaja... No puedes borrarme con puños. ¡SOY TU PROPIA CULPA!' },
+                    { speaker: 'dr', text: '¡Paciente, escúchame! No lo niegues, acéptalo como parte de tu historia, ¡pero quítale el control de tu vida!' },
+                    { speaker: 'patient', text: 'Es verdad... eres mi pasado. Te acepto, pero ya NO me vas a dominar. ¡ÚLTIMO ASALTO!' }
+                ];
+
+                this.cameras.main.fade(500, 0, 0, 0);
+                this.cameras.main.once('camerafadeoutcomplete', () => {
+                    this.scene.start('DialogueScene', {
+                        lines: lineasResurreccion,
+                        nextScene: 'CombatScene',
+                        nextData: {
+                            currentRound: 3,
+                            nemesisRevived: true,
+                            savedPatientHp: this.paciente.hp
+                        }
+                    });
+                });
+            } else {
+                this.paciente.state = 'CINEMATIC';
+                
+                const lineasVictoriaFinal = [
+                    { speaker: 'nemesis', text: 'No... puede... ser... Te estás... perdonando...' },
+                    { speaker: 'patient', text: 'Adiós, viejo fantasma. Hoy decido avanzar.' },
+                    { speaker: 'system', text: '◈ ENHORABUENA: Has superado tus demonios internos.' }
+                ];
+
+                this.cameras.main.fade(1000, 0, 0, 0);
+                this.cameras.main.once('camerafadeoutcomplete', () => {
+                    this.scene.start('DialogueScene', {
+                        lines: lineasVictoriaFinal,
+                        nextScene: 'EndScene',
+                        nextData: { victoria: true }
+                    });
+                });
+            }
+        }
     }
 }
