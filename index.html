@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coach - Fight Your Inner Demons</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #game {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="game"></div>
+
+    <!-- Phaser 3.55 via CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.55.2/phaser.min.js"></script>
+
+    <!-- Scenes -->
+    <script src="src/scenes/BootScene.js"></script>
+    <script src="src/scenes/DialogueScene.js"></script>
+    <script src="src/scenes/CombatScene.js"></script>
+    <script src="src/scenes/EndScene.js"></script>
+
+    <!-- Config + Main -->
+    <script src="src/config.js"></script>
+    <script src="src/main.js"></script>
+</body>
+</html>
