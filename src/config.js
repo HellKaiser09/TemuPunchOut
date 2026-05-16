@@ -1,24 +1,20 @@
-const gameConfig = {
+import { BootScene } from './scenes/BootScene.js';
+import { DialogueScene } from './scenes/DialogueScene.js';
+import { CombatScene } from './scenes/CombatScene.js';
+import { EndScene } from './scenes/EndScene.js';
+
+export const config = {
     type: Phaser.AUTO,
+    width: 800,
+    height: 600,
     parent: 'game',
-    width: 1280,
-    height: 720,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#242424',
     physics: {
         default: 'arcade',
         arcade: {
-            gravity: { y: 0 },
-            debug: false,
-            enableBody: true
+            gravity: { y: 0 }, 
+            debug: true         
         }
     },
-    scene: [BootScene, DialogueScene, CombatScene, EndScene],
-    scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
-        fullscreenTarget: 'parent'
-    }
+    scene: [BootScene, DialogueScene, CombatScene, EndScene]
 };
- 
-// Exportar para que main.js lo use
-window.gameConfig = gameConfig;
