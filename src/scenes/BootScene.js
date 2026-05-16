@@ -3,21 +3,30 @@ export class BootScene extends Phaser.Scene {
         super({ key: 'BootScene' });
     }
 
-    preload() {
-        console.log('BootScene: Precargando assets...');
-        
-        // Texto temporal
-        let loadingText = this.add.text(400, 300, 'Cargando Assets...', { font: '24px Arial', fill: '#fff' });
-        loadingText.setOrigin(0.5);
 
-        // Aquí irá la carga de imágenes/audio, ej:
-        // this.load.image('player', 'src/assets/sprites/player.png');
-    }
+    //
+  //  preload() {
+        // Fondo del menú
+        // this.load.image('bg_menu', 'src/assets/bg_menu.png');
 
-    create() {
-        console.log('BootScene: ¡Carga completa!');
-        
-        // Al terminar de cargar, mandamos automáticamente a la escena de combate (o de diálogo)
-        this.scene.start('CombatScene');
-    }
+preload() {
+    // this.load.image('bg_menu', 'src/assets/bg_menu.png');
+
+        const loadingText = this.add.text(400, 250, 'Cargando...', {
+            font: '24px Arial', fill: '#fff'
+        }).setOrigin(0.5);
+
+        this.load.on('progress', (v) => loadingText.setText(`Cargando... ${Math.floor(v * 100)}%`));
+
 }
+
+create() {
+    this.scene.start('MenuScene');
+} }
+
+   //}
+
+//    create() {
+  //      this.scene.start('MenuScene');  // ← va al menú, no al combate
+    //}
+//
