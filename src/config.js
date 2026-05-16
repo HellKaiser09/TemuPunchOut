@@ -1,9 +1,9 @@
-import { BootScene } from './scenes/BootScene.js';
+import { BootScene }    from './scenes/BootScene.js';
+import { MenuScene }    from './scenes/MenuScene.js';
 import { DialogueScene } from './scenes/DialogueScene.js';
-import { CombatScene } from './scenes/CombatScene.js';
-import { EndScene } from './scenes/EndScene.js';
-import CoachScene from './scenes/CoachScene.js';
-
+import { CombatScene }  from './scenes/CombatScene.js';
+import { EndScene }     from './scenes/EndScene.js';
+import CoachScene       from './scenes/CoachScene.js';
 export const config = {
     type: Phaser.AUTO,
     width: 2170,
@@ -13,9 +13,15 @@ export const config = {
     physics: {
         default: 'arcade',
         arcade: {
-            gravity: { y: 0 }, 
-            debug: true         
+            gravity: { y: 0 },
+            debug: false
         }
     },
-    scene: [BootScene, CombatScene, DialogueScene, CoachScene, EndScene]
+    scene: [BootScene, MenuScene, CombatScene, DialogueScene, CoachScene, EndScene]
 };
+
+
+
+
+
+

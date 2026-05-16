@@ -169,21 +169,17 @@ procesarGolpeNemesis(data = {}) {
             evadido = false;
         }
     }
-
-    if (tipo === 'ARRIBA') {
-        // Solo se esquiva agachándose
-        if (this.paciente.state === 'AGACHADO') {
-            evadido = true;
-            razon   = '¡Pasó por arriba! (te agachaste a tiempo)';
-        }
-        // Esquivar a los lados no sirve para golpe de arriba
+// Agachado — solo esquiva ARRIBA y ESPECIAL, no laterales
+    if (tipo === 'ARRIBA' || tipo === 'ESPECIAL') {
+    if (this.paciente.state === 'AGACHADO' || this.paciente.isDucking) {
+        evadido = true;
+        razon = tipo === 'ARRIBA'
+            ? '¡Pasó por arriba! (te agachaste)'
+            : '¡Esquivaste el letrero!';
     }
+}
 
-    // Guardia reduce daño en cualquier tipo
-    if (!evadido && this.paciente.state === 'BLOQUEANDO') {
-        bloqueado = true;
-    }
-
+    
     // ── Aplicar resultado ─────────────────────────────────────
     if (evadido) {
         this.infoText.setText(`✓ ${razon}`);
