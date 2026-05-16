@@ -10,7 +10,8 @@ export class BootScene extends Phaser.Scene {
         // this.load.image('bg_menu', 'src/assets/bg_menu.png');
 
 preload() {
-    // this.load.image('bg_menu', 'src/assets/bg_menu.png');
+    this.load.image('bg_menu', "src/assets/sprites/Frame_4.png");
+    this.load.image('bg_menu_tutorial', "src/assets/sprites/Frame_6.png")
 
         const loadingText = this.add.text(400, 250, 'Cargando...', {
             font: '24px Arial', fill: '#fff'
@@ -23,10 +24,3 @@ preload() {
 create() {
     this.scene.start('MenuScene');
 } }
-
-   //}
-
-//    create() {
-  //      this.scene.start('MenuScene');  // ← va al menú, no al combate
-    //}
-//
