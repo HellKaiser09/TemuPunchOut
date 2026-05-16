@@ -5,8 +5,8 @@ import { EndScene } from './scenes/EndScene.js';
 
 export const config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    width: 2170,
+    height: 1160,
     parent: 'game',
     backgroundColor: '#242424',
     physics: {
