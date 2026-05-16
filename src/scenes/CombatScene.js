@@ -1,162 +1,295 @@
-
-import { BuffSystem } from './BuffSystem.js';
-
-export default class CombatScene extends Phaser.Scene {
-  constructor() {
-    super({ key: 'CombatScene' });
-  }
-
-  create() {
-    // ── Stats base del jugador y enemigo ──────────────────
-    // "base" sirve para que BuffSystem calcule porcentajes correctamente
-    this.playerStats = {
-      hp: 650, maxHp: 1000,
-      damage: 80, defense: 50, critDamage: 150,
-      courage: 0,
-      base: { hp: 650, maxHp: 1000, damage: 80, defense: 50, critDamage: 150 },
-    };
-
-    this.enemyStats = {
-      hp: 800, maxHp: 800,
-      damage: 70, defense: 40,
-      base: { damage: 70, defense: 40 },
-    };
-
-    // ── BuffSystem ────────────────────────────────────────
-    this.buffSystem = new BuffSystem(this, this.playerStats, this.enemyStats);
-
-    // Escucha el evento que llega de CoachScene
-    this.events.on('coach-buff-chosen', (buffId) => {
-      this.buffSystem.apply(buffId);
-      this._showBuffAppliedFeedback(buffId);
-      this._startNextRound();
-    });
-
-    // Escucha ticks de buffs (para actualizar UI de estado)
-    this.events.on('buffs-ticked', (activeBuffs) => {
-      this._updateBuffHUD(activeBuffs);
-    });
-
-    // Tu código de creación de sprites, mapa, etc. sigue aquí...
-    this._setupInput();
-  }
-
-  // ── Lanza el coach al terminar un round ──────────────────
-  _endRound(roundNumber) {
-    // 1. Descuenta duración de los buffs activos
-    this.buffSystem.tickRound();
-
-    // 2. Evalúa desbloqueos condicionales (ej: 'integracion' si ganaste)
-    const pending = this.registry.get('pendingUnlock');
-    if (pending?.condition === 'win_round' && this._playerWonRound()) {
-      this._unlockAbility(pending.ability);
-      this.registry.remove('pendingUnlock');
+export class CombatScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'CombatScene' });
     }
 
-    // 3. Pausa la lógica de combate y lanza la escena del coach
-    this.scene.launch('CoachScene', {
-      round:         roundNumber + 1,
-      playerHp:      this.playerStats.hp,
-      playerMaxHp:   this.playerStats.maxHp,
-      playerEnergy:  this.playerEnergy ?? 40,
-    });
-  }
+    create() {
+        console.log('La CombatScene ya esta cargando::::::');
+        this.cameras.main.fadeIn(500, 0, 0, 0);
 
-  // ── Aplica el buff on-hit por cada golpe recibido ─────────
-  _onPlayerHitReceived(damage) {
-    const onHit = this.registry.get('onHitBuff');
-    if (onHit) {
-      this.playerStats[onHit.stat] = (this.playerStats[onHit.stat] ?? 0) + onHit.value;
-      // Muestra el número flotante de ganancia de Coraje
-      this._floatingText(
-        this.player.x, this.player.y - 30,
-        `+${onHit.value} ${onHit.stat}`, '#378add'
-      );
-    }
 
-    // Inmunidad a estados (ej: vergüenza)
-    if (this.buffSystem.isImmuneTo('vergüenza')) {
-      // No apliques el debuff de vergüenza aunque el enemigo lo intente
-      return;
-    }
+        // Primero vamos a cargar las dimensiones que se sacaron del config
+        const width = this.sys.game.config.width;
+        const height = this.sys.game.config.height;
 
-    this.playerStats.hp -= damage;
-    this._updateHpBar();
-  }
+        //Creamos los sprites provisionales para probar que sirven las cosas
+        this.nemesis = this.add.rectangle(width / 2, height / 2 - 50, 200, 250, 0x882222);
+        this.paciente = this.add.rectangle(width / 2, height - 120, 120, 180, 0x224488);
 
-  // ── Calcula el daño aplicando modificadores del buff ─────
-  _calculateDamage(baseAtk, isCrit = false) {
-    const stats = this.playerStats;
-    let dmg = baseAtk * (stats.damage / stats.base.damage);
+        //ESTO ES LA INTERFAZ DEL JUEGO(TEMPORAL)
+        this.add.text(50, 30, "Diseñador: ", { font: "16px Arial", fill: "#fff" });
+        this.pacienteHPbar = this.add.rectangle(50, 55, 250, 20, 0x00ff00).setOrigin(0, 0.5);
 
-    if (isCrit) {
-      dmg *= stats.critDamage / 100;
-    }
+        this.add.text(width - 300, 30, 'nemesis', { font: '16px Arial', fill: '#fff' });
+        this.nemesisHPBar = this.add.rectangle(width - 300, 55, 250, 20, 0xff0000).setOrigin(0, 0.5);
 
-    return Math.round(dmg);
-  }
+        // Configuracion de los inputs (aqui aun lo podemos modificar... checalo tu jesus para cambiarlo )
+        // Por ahora usamos las Flechas para esquivar/bloquear y Espacio para golpear
+        this.controls = this.input.keyboard.createCursorKeys();
+        // Tecla extra para el golpe por si quieren testearla
+        this.punchKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-  _calculateEnemyDamage(baseAtk) {
-    // El buff "limites" ya redujo enemyStats.damage; solo aplica el valor actual
-    return Math.round(baseAtk * (this.enemyStats.damage / this.enemyStats.base.damage));
-  }
+        //ESTADOS LOGICOS DE LOS PERSONAJES
+        this.pacienteState = "NEUTRAL"; // Estados posibles: NEUTRAL, ESQUIVE_IZQ, ESQUIVE_DER, BLOQUEO, ATACANDO
+        this.nemesisState = "IDLE"; // El ritmo del nemesis que cambia segun los dialogos
 
-  // ── Feedback visual al aplicar un buff ───────────────────
-  _showBuffAppliedFeedback(buffId) {
-    const catalog = { /* importa BUFF_CATALOG */ };
-    const buff = catalog[buffId];
-    if (!buff) return;
+        // Texto informativo en pantalla
+        this.infoText = this.add.text(width / 2, 20, 'Estado: NEUTRAL', { font: '18px monospace', fill: '#ffff00' }).setOrigin(0.5);
 
-    // Texto flotante grande centrado
-    const txt = this.add.text(
-      this.scale.width / 2,
-      this.scale.height / 2 - 40,
-      `${buff.icon}  ${buff.name}`,
-      { fontSize: '28px', fontFamily: 'sans-serif', color: '#ffd700' }
-    ).setOrigin(0.5).setAlpha(0);
+        // Contador de esquiva
+        this.countdownText = this.add.text(width / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5);
+        this.countdownText.setVisible(false);
+        this.alertText = this.add.text(width / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
 
-    this.tweens.add({
-      targets: txt, alpha: 1, y: '-=30', duration: 400, ease: 'Back.Out',
-      onComplete: () => {
-        this.tweens.add({
-          targets: txt, alpha: 0, y: '-=20', delay: 900, duration: 300,
-          onComplete: () => txt.destroy(),
+        this.pacienteHP = 150;
+        this.nemesisHP = 100; 
+        this.nemesisAttackDirection = "NINGUNA"; 
+        this.pacienteBaseY = this.paciente.y;
+        this.lastDodgeDirection = "NINGUNA";
+
+        this.nemesisTimer = this.time.addEvent({
+            delay: 4500,
+            callback: this.startNemesisAttack,
+            callbackScope: this,
+            loop: true
         });
-      },
-    });
-  }
+    }
 
-  // ── HUD de buffs activos (lista en esquina) ───────────────
-  _updateBuffHUD(activeBuffs) {
-    // Aquí actualizas tus íconos/textos de buffs en pantalla.
-    // activeBuffs es un array de { effect, rounds, delta, target, mode }
-    // Ejemplo mínimo:
-    if (this.buffHUDTexts) this.buffHUDTexts.forEach(t => t.destroy());
-    this.buffHUDTexts = [];
+    update() {
+        //Manejos de los inputs y los estados del jugador osea la logica de los golpes y asi 
+        if (this.pacienteState === "NEUTRAL") {
+            if (this.controls.left.isDown) {
+                this.executeDodge("IZQUIERDA");
+            } else if (this.controls.right.isDown) {
+                this.executeDodge("DERECHA");
+            } else if (this.controls.down.isDown) {
+                this.executeBlock();
+            } else if (Phaser.Input.Keyboard.JustDown(this.punchKey)) {
+                this.executePunch();
+            }
+        }
+    }
 
-    activeBuffs.forEach((mod, i) => {
-      const label = `${mod.effect.stat} (${mod.rounds}r)`;
-      const t = this.add.text(12, 80 + i * 18, label, {
-        fontSize: '11px', fontFamily: 'monospace', color: '#9fe1cb',
-      });
-      this.buffHUDTexts.push(t);
-    });
-  }
+    executeDodge(direction) {
+        this.pacienteState = direction === "IZQUIERDA" ? "ESQUIVE_IZQ" : "ESQUIVE_DER";
+        this.lastDodgeDirection = direction;
+        this.infoText.setText(`Estado: ESQUIVE ${direction}`);
 
-  _floatingText(x, y, msg, color = '#ffffff') {
-    const t = this.add.text(x, y, msg, {
-      fontSize: '16px', fontFamily: 'sans-serif', color,
-    }).setOrigin(0.5);
+        const offset = direction === "IZQUIERDA" ? -60 : 60;
 
-    this.tweens.add({
-      targets: t, y: y - 40, alpha: 0, duration: 800,
-      onComplete: () => t.destroy(),
-    });
-  }
+        this.tweens.add({
+            targets: this.paciente,
+            x: (this.sys.game.config.width / 2) + offset,
+            duration: 150,
+            yoyo: true,
+            hold: 100,
+            onComplete: () => {
+                this.pacienteState = "NEUTRAL";
+                this.infoText.setText("Estado: NEUTRAL");
+            }
+        }); 
+    }
 
-  _startNextRound()    { /* reanuda tu lógica de combate */ }
-  _playerWonRound()    { return this.enemyStats.hp <= 0; }
-  _unlockAbility(name) { console.log(`Habilidad desbloqueada: ${name}`); }
-  _updateHpBar()       { /* actualiza tu barra de HP */ }
-  _setupInput()        { /* teclado / controles */ }
+    executeBlock() {
+        this.pacienteState = 'BLOQUEANDO';
+        this.infoText.setText('Estado: BLOQUEO');
+        this.paciente.setScale(1, 0.8); // Se "agacha" o encoge temporalmente
+
+        // Volver a neutral cuando suelte la tecla de flecha abajo
+        this.input.keyboard.once('keyup-DOWN', () => {
+            this.paciente.setScale(1, 1);
+            this.pacienteState = 'NEUTRAL';
+            this.infoText.setText('Estado: NEUTRAL');
+        });
+    }
+
+    executePunch() {
+        // Bloqueamos si está animando, si el enemigo murió o si está recuperándose del golpe anterior
+        if (this.tweens.isTweening(this.paciente) || this.nemesisHP <= 0 || this.pacienteState === 'RECOVERY') return;
+
+        this.pacienteState = 'ATACANDO';
+        
+        // 🔥 NUEVO: Probabilidad de bloqueo (25%). Mañana esto puede cambiar según el diálogo (ej. estaConfig.blockChance)
+        const blockChance = 0.25;
+        const isBlocked = Math.random() < blockChance;
+
+        if (isBlocked) {
+            // El enemigo bloquea el golpe
+            this.infoText.setText('¡Tu golpe fue bloqueado!');
+            this.alertText.setText('🛡️ ¡BLOQUEO!');
+            
+            // Feedback visual de bloqueo: se pone gris temporalmente
+            this.nemesis.setFillStyle(0x555555);
+            this.time.delayedCall(150, () => {
+                if (this.nemesisHP > 0 && this.nemesisState !== 'ATACANDO') {
+                    this.nemesis.setFillStyle(0x882222);
+                }
+                this.alertText.setText('');
+            });
+            
+            // Sacudida de cámara sutil por el choque de guardias
+            this.cameras.main.shake(50, 0.005);
+
+        } else {
+            // GOLPE EXITOSO: Lógica original de daño
+            const damageDealt = 10;
+            this.infoText.setText(`Golpe lanzado (-${damageDealt} HP)`);
+
+            this.nemesisHP -= damageDealt;
+            const clampedNemesisHP = Math.max(0, this.nemesisHP);
+            this.nemesisHPBar.setSize((clampedNemesisHP / 100) * 250, 20);
+
+            // Feedback visual de daño
+            this.cameras.main.shake(100, 0.01);
+            this.nemesis.setFillStyle(0xffffff);
+            
+            this.tweens.add({
+                targets: this.nemesis,
+                scaleX: 1.1,
+                scaleY: 0.9,
+                duration: 50,
+                yoyo: true,
+                onComplete: () => { 
+                    if (this.nemesisHP > 0 && this.nemesisState !== 'ATACANDO') {
+                        this.nemesis.setFillStyle(0x882222); 
+                    }
+                }
+            });
+        }
+
+        // El movimiento físico del paciente y el cooldown ocurren SIEMPRE (falles o aciertes el golpe)
+        this.tweens.add({
+            targets: this.paciente,
+            y: this.pacienteBaseY - 40, 
+            duration: 80,
+            yoyo: true,
+            onComplete: () => {
+                this.paciente.y = this.pacienteBaseY;
+
+                // Check de victoria
+                if (this.nemesisHP <= 0) {
+                    this.nemesisTimer.destroy();
+                    this.infoText.setText('¡Demonio derrotado! Yendo a descansar...');
+                    this.cameras.main.fade(800, 0, 0, 0);
+                    this.cameras.main.once('camerafadeoutcomplete', () => {
+                        this.scene.start('DialogueScene');
+                    });
+                    return;
+                }
+
+                // Fase de recuperación (Cooldown anti-spam)
+                this.pacienteState = 'RECOVERY';
+                this.infoText.setText('Recuperando guardia...');
+
+                this.time.delayedCall(300, () => {
+                    this.pacienteState = 'NEUTRAL';
+                    this.infoText.setText('Estado: NEUTRAL');
+                }, [], this);
+            }
+        });
+}
+
+    startNemesisAttack() {
+        if (this.nemesisState !== 'IDLE' || this.nemesisHP <= 0) return;
+
+        this.nemesisState = 'ATACANDO';
+        // Elige al azar si ataca por la izquierda o derecha
+        this.nemesisAttackDirection = Math.random() > 0.5 ? 'IZQUIERDA' : 'DERECHA';
+
+        // TELEGRAFO: Cambia a Amarillo (Cuidado)
+        this.nemesis.setFillStyle(0xeeee22);
+        this.alertText.setText(`¡ALERTA! Ataque por la ${this.nemesisAttackDirection}`);
+
+        // Mostrar contador regresivo de esquiva
+        this.countdownText.setVisible(true);
+        let timeRemaining = 1500; // 1.5 segundos en ms
+        this.time.addEvent({
+            delay: 100,
+            repeat: 14,
+            callback: () => {
+                timeRemaining -= 100;
+                const seconds = (timeRemaining / 1000).toFixed(1);
+                this.countdownText.setText(`⏱ ${seconds}s`);
+                
+                // Cambiar color según el tiempo
+                if (timeRemaining <= 300) {
+                    this.countdownText.setFill('#ff0000'); // Rojo si quedan menos de 0.3s
+                } else if (timeRemaining <= 600) {
+                    this.countdownText.setFill('#ffaa00'); // Naranja si quedan menos de 0.6s
+                } else {
+                    this.countdownText.setFill('#00ff00'); // Verde
+                }
+            }
+        });
+
+        // Ventana de reacción: en 1500ms se ejecuta el golpe físico
+        this.time.delayedCall(1500, () => {
+            this.countdownText.setVisible(false);
+            this.executeNemesisHit();
+        }, [], this);
+    }
+
+    executeNemesisHit() {
+        if (this.nemesisHP <= 0) return;
+
+        // COLORES DIFERENTES SEGÚN DIRECCIÓN DEL ATAQUE
+        const colorIzquierda = 0xff2200; // Rojo puro (izquierda)
+        const colorDerecha = 0x2200ff;   // Azul puro (derecha)
+        const colorAtaque = this.nemesisAttackDirection === 'IZQUIERDA' ? colorIzquierda : colorDerecha;
+        
+        this.nemesis.setFillStyle(colorAtaque);
+
+        // LÓGICA DE ESQUIVE MEJORADA CON ESTADOS LÓGICOS
+        let evadido = false;
+        let razonEvasion = "";
+        
+        // Si ataca por la IZQUIERDA, el paciente debió esquivar a la DERECHA
+        if (this.nemesisAttackDirection === 'IZQUIERDA' && this.lastDodgeDirection === 'DERECHA') {
+            evadido = true;
+            razonEvasion = "Esquive correcto (ataque IZQ → esquivó DER)";
+        }
+        // Si ataca por la DERECHA, el paciente debió esquivar a la IZQUIERDA
+        if (this.nemesisAttackDirection === 'DERECHA' && this.lastDodgeDirection === 'IZQUIERDA') {
+            evadido = true;
+            razonEvasion = "Esquive correcto (ataque DER → esquivó IZQ)";
+        }
+        if (this.pacienteState === 'BLOQUEANDO') {
+            evadido = true;
+            razonEvasion = "Bloqueó el ataque";
+        }
+
+        if (evadido) {
+            this.infoText.setText(`✓ ${razonEvasion}`);
+            console.log(`[ESQUIVA EXITOSA] ${razonEvasion} | Paciente HP: ${this.pacienteHP}/150`);
+        } else {
+            // ¡Se comió el golpe!
+            const damageDealt = 10;
+            this.pacienteHP -= damageDealt;
+            this.infoText.setText(`✗ ¡Golpe recibido! (-${damageDealt} HP)`);
+            console.log(`[GOLPE RECIBIDO] Daño: ${damageDealt} | Paciente HP: ${this.pacienteHP}/150`);
+            
+            // Actualizar barra de vida visual (Dividido entre 150 que es su HP Máximo real)
+            const clampedHP = Math.max(0, this.pacienteHP);
+            this.pacienteHPbar.setSize((clampedHP / 150) * 250, 20);
+            
+            // Flash rojo en la pantalla para dar feedback de daño
+            this.cameras.main.flash(100, 255, 0, 0);
+        }
+
+        // Resetear al nemesis a su estado normal después de 300ms del golpe
+        this.time.delayedCall(300, () => {
+            this.nemesis.setFillStyle(0x882222); // Vuelve a su color base
+            this.nemesisState = 'IDLE';
+            this.nemesisAttackDirection = 'NINGUNA';
+            this.lastDodgeDirection = 'NINGUNA';
+            this.alertText.setText('');
+            if (this.pacienteState === 'NEUTRAL') this.infoText.setText('Estado: NEUTRAL');
+            
+            // Check de derrota
+            if (this.pacienteHP <= 0) {
+                console.log('[DERROTA] Paciente derrotado');
+                this.scene.start('EndScene');
+            }
+        }, [], this);
+    }
 }
