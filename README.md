@@ -16,7 +16,7 @@ node -v && npm -v
 npm init -y
 
 # Instalar Phaser 3.55
-npm install phaser@3.55.2
+npm install phaser@3.90.0
 
 ```
 
