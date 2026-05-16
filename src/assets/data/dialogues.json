@@ -1,0 +1,76 @@
+{
+  "intro": [
+    { "speaker": "dr",      "text": "¿Y dígame... por qué se encuentra aquí hoy?" },
+    { "speaker": "patient", "text": "Bueno... es que tengo un problema. Soy estudiante de diseño gráfico y me da mucho miedo que cuando me gradúe solo pueda terminar trabajando en una tienda de comida rápida." },
+    { "speaker": "dr",      "text": "Ajá." },
+    { "speaker": "dr",      "text": "¿Y eso le quita el sueño?" },
+    { "speaker": "patient", "text": "Sí, bastante." },
+    { "speaker": "dr",      "text": "Perfecto." },
+    { "speaker": "patient", "text": "¿...Perfecto?" },
+    { "speaker": "dr",      "text": "El miedo que lo desvela será exactamente lo que usaremos. Recuéstese en el sillón, por favor." },
+    { "speaker": "patient", "text": "¿No me va a explicar en qué consiste primero?" },
+    { "speaker": "dr",      "text": "No." },
+    { "speaker": "patient", "text": "...Okay." },
+    { "speaker": "dr",      "text": "Cierre los ojos. Respire profundo." },
+    { "speaker": "dr",      "text": "Que empieza... la Terapia de Choque." },
+    { "speaker": "patient", "text": "Oiga, doctor... ¿esto es normal? Siento que me estoy—" }
+  ],
+  "tutorial": [
+    { "speaker": "system", "text": "Estás a punto de enfrentarte a tu miedo." },
+    { "speaker": "system", "text": "No te preocupes. Es solo un sueño." },
+    { "speaker": "system", "text": "(Más o menos.)" },
+    { "speaker": "system", "text": "[Q] [W]  Golpes bajos\n[E] [R]  Golpes altos\n[←] [→]  Esquivar\n[↓]  Agacharse" },
+    { "speaker": "system", "text": "Tu oponente representa algo que te ha estado quitando el sueño." },
+    { "speaker": "system", "text": "Aunque literalmente tiene forma de combo #3." }
+  ],
+  "coachIntro": [
+    { "speaker": "dr",      "text": "Bien. Sobrevivió el primer round." },
+    { "speaker": "patient", "text": "¡¿Qué está pasando?! ¡Hay una hamburguesa gigante intentando noquearme!" },
+    { "speaker": "dr",      "text": "Sí." },
+    { "speaker": "patient", "text": "¡¡Tiene guantes de box!!" },
+    { "speaker": "dr",      "text": "Claro, si no, no podria pelear. Es perfectamente normal." },
+    { "speaker": "dr",      "text": "Ahora escúcheme. Tengo un consejo para usted antes del siguiente round." },
+  ],
+  "coachBuffResponses": {
+    "autoestima": [
+      { "speaker": "dr", "text": "Recuerde por qué eligió el diseño." },
+      { "speaker": "dr", "text": "No fue por el dinero, claramente. Fue porque algo en usted necesitaba crear." },
+      { "speaker": "dr", "text": "Eso no lo borra ninguna hamburguesa." }
+    ],
+    "limites": [
+      { "speaker": "dr", "text": "Su miedo tiene tanto poder sobre usted como usted se lo permita." },
+      { "speaker": "dr", "text": "Dígale que no. En voz alta si puede. Aquí nadie lo está viendo." },
+      { "speaker": "dr", "text": "(Bueno, yo sí. Pero soy profesional.)" }
+    ],
+    "vulnerabilidad": [
+      { "speaker": "dr", "text": "Lo más valiente que puede hacer ahora mismo es admitir que tiene miedo." },
+      { "speaker": "dr", "text": "No fingir que no lo tiene. Su miedo ya lo sabe de todos modos." }
+    ],
+    "perdonarte": [
+      { "speaker": "dr", "text": "Hay una diferencia entre enfrentar su miedo y estrellarse contra él." },
+      { "speaker": "dr", "text": "Pero a veces uno necesita estrellarse para entender de qué está hecho." },
+      { "speaker": "dr", "text": "Adelante." }
+    ]
+  },
+  "ending": [
+    { "speaker": "dr",      "text": "¿Cómo se siente?" },
+    { "speaker": "patient", "text": "...Golpeé una hamburguesa gigante." },
+    { "speaker": "dr",      "text": "Sí." },
+    { "speaker": "patient", "text": "En mis sueños." },
+    { "speaker": "dr",      "text": "Correcto." },
+    { "speaker": "patient", "text": "¿Y eso... me ayudó?" },
+    { "speaker": "dr",      "text": "Depende. ¿Le sigue dando miedo trabajar en comida rápida?" },
+    { "speaker": "patient", "text": "...Un poco menos, la verdad." },
+    { "speaker": "dr",      "text": "Entonces funcionó." },
+    { "speaker": "patient", "text": "¿Cuántas sesiones hacen falta?" },
+    { "speaker": "dr",      "text": "Eso depende de cuántas cosas tenga pendiente de enfrentar." },
+    { "speaker": "dr",      "text": "Usted... tiene varias." },
+    { "speaker": "patient", "text": "¿Cuántas es \"varias\"?" },
+    { "speaker": "dr",      "text": "Para la próxima sesión le explico. Por ahora descanse." },
+    { "speaker": "dr",      "text": "El sueño se termina cuando uno está listo. Usted todavía no lo está." },
+    { "speaker": "patient", "text": "Espere, eso no es—" },
+    { "speaker": "silent",  "text": "[El paciente se queda dormido.]" },
+    { "speaker": "dr",      "text": "Capítulo uno. Síndrome del impostor. Nivel de resistencia: moderado. Pronóstico: prometedor." },
+    { "speaker": "silent",  "text": "— FIN DEL CAPÍTULO 1 —" }
+  ]
+}
