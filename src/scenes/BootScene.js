@@ -4,11 +4,6 @@ export class BootScene extends Phaser.Scene {
     }
 
 
-    //
-  //  preload() {
-        // Fondo del menú
-        // this.load.image('bg_menu', 'src/assets/bg_menu.png');
-
 preload() {
     this.load.image('bg_menu', "src/assets/sprites/Frame_4.png");
     this.load.image('bg_menu_tutorial', "src/assets/sprites/Frame_6.png")

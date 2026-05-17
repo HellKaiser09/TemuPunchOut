@@ -18,7 +18,7 @@ export const config = {
             debug: false
         }
     },
-    scene: [BootScene, MenuScene, CombatScene, DialogueScene, CoachScene, EndScene]
+    scene: [BootScene, MenuScene, CombatScene, DialogueScene, CoachScene, EndScene,TutorialScene]
 };
 
 
