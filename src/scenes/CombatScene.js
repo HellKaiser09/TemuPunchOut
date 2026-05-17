@@ -47,8 +47,18 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
             });
         }
 
+        // FIX: Animación de bloqueo del jugador (ya estaba declarada, ahora también se usa en procesarGolpeNemesis)
+        if (!this.anims.exists('bloqueo_derecho')) {
+            this.anims.create({
+                key: 'bloqueo_derecho',
+                frames: [
+                    { key: 'bloqueo2' },
+                    { key: 'bloqueo1' },
+                ],
+                frameRate: 12, repeat: 0
+            });
+        }
 
-        
         if (!this.anims.exists('enemigo_batazo_der')) {
             this.anims.create({
                 key: 'enemigo_batazo_der',
@@ -97,6 +107,26 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
                 frameRate: 4, repeat: -1
             });
         }
+        if (!this.anims.exists('enemigo_bloqueoarriba')) {
+            this.anims.create({
+                key: 'enemigo_bloqueoarriba',
+                frames: [
+                    { key: 'bloqueo1' },
+                    { key: 'bloqueo2' },
+                ],
+                frameRate: 3, repeat: -1
+            });
+        }
+         if (!this.anims.exists('enemigo_bloqueoabajo')) {
+            this.anims.create({
+                key: 'enemigo_bloqueoabajo',
+                frames: [
+                    { key: 'bloqueo3' },
+                    { key: 'bloqueo4' },
+                ],
+                frameRate: 3, repeat: -1
+            });
+        }
 
         // ── Entidades ─────────────────────────────────────────
         this.nemesis  = new Nemesis(this, W / 2, H / 2 - 50);
@@ -131,13 +161,11 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
             else if (direccion === 'ESPECIAL')  this.enemigo.play('enemigo_especial',      true);
         });
 
-
         this.events.on('nemesis-fin-recovery', () => {
             if (this.enemigo?.active) {
                 this.enemigo.play('enemigo_idle', true);
-        }
+            }
         });
-
 
         this.events.on('nemesis-recovery', () => {
             if (this.enemigo.anims.currentAnim?.key === 'enemigo_especial') {
@@ -151,77 +179,55 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
         this.nemesis.damage = this.nemesis.damage ?? this.nemesis.base.damage;
 
         // ── Sistemas ──────────────────────────────────────────
+        // FIX: Una sola instancia de cada sistema (antes se creaban dos veces, causando audio superpuesto)
         this.buffSystem  = new BuffSystem(this, this.paciente, this.nemesis);
         this.audioSystem = new AudioSystem(this);
         this.audioSystem.playBGM('bgm_pelea');
         this.audioSystem.playInicioPelea();
 
         // ── UI ────────────────────────────────────────────────
-   this.buffSystem  = new BuffSystem(this, this.paciente, this.nemesis);
+        const topY = 70;
+        const barW = 450;
+        const barH = 38;
+        const cornerRadius = 18;
+        this.hudConfig = { topY, barW, barH, cornerRadius, W };
 
-        this.audioSystem = new AudioSystem(this);
-
-        this.audioSystem.playBGM('bgm_pelea');
-
-        this.audioSystem.playInicioPelea();
-
-        // ── 🎨 RENDER VISUAL DEL NUEVO HUD ROUNDED ──
-
-        const topY = 70;          
-
-        const barW = 450;        
-
-        const barH = 38;          
-
-        const cornerRadius = 18;  
-
-        // 🔥 Aquí definimos hudConfig para que _refreshCombatUI no crashee
-
-        this.hudConfig = { topY, barW, barH, cornerRadius, W }
-
-        this.avatarJugador = this.add.image(90, topY, 'paciente_caras', 0).setScale(0.5).setDepth(15);
-
-        this.avatarEnemigo = this.add.image(W - 90, topY, 'hamburguesa_golpe_izq', 0).setScale(0.18).setDepth(15);
-
+        // 1. Instanciar motores gráficos para las barras de vida
         this.graphicsHPJugador = this.add.graphics().setDepth(14);
-
         this.graphicsHPEnemigo = this.add.graphics().setDepth(14);
-        // Textos identificadores de barras
 
-        this.add.text(150, 25, `Paciente (Round ${this.currentRound}):`, { font: '16px Arial', fill: '#fff' }).setDepth(15);
+        // 2. Marco Geométrico de fondo para los Retratos
+        const marcoGfx = this.add.graphics().setDepth(13);
+        marcoGfx.fillStyle(0x0d0d1a, 1);
+        marcoGfx.lineStyle(3, 0xffd700, 1);
 
-        this.add.text(W - 150, 25,
+        marcoGfx.fillRoundedRect(45, topY - 45, 90, 90, 24);
+        marcoGfx.strokeRoundedRect(45, topY - 45, 90, 90, 24);
+        marcoGfx.fillRoundedRect(W - 135, topY - 45, 90, 90, 24);
+        marcoGfx.strokeRoundedRect(W - 135, topY - 45, 90, 90, 24);
 
-            this.nemesisRevived ? 'AUTONÉMESIS (💥 IRA CONSCIENTE)' : 'AutoNémesis',
+        // 3. Imágenes de los peleadores
+        this.avatarJugador = this.add.image(90, topY, 'perfilpaciente', 0)
+            .setScale(1.2)
+            .setDepth(15)
+            .setOrigin(0.5);
 
-            { font: '16px Arial', fill: '#fff' }
-
-        ).setOrigin(1, 0).setDepth(15);
-
-        // Nuevo posicionamiento de la Barra de Súper alineada con el Portrait
-
-        this.add.text(150, 95, 'SÚPER:', { font: '12px monospace', fill: '#00ffff' }).setDepth(15);
-
-        this.superBar = this.add.rectangle(210, 101, 0, 10, 0x00ffff).setOrigin(0, 0.5).setDepth(15);
-
-        // 🔥 PEGA ESTO AQUÍ: Recreación de los textos flotantes que se borraron
+        this.avatarEnemigo = this.add.image(W - 90, topY, 'perfilburguer', 0)
+            .setScale(0.19)
+            .setDepth(15)
+            .setOrigin(0.5);
 
         if (this.nemesisRevived) {
-
             this.nemesis.hp = 60;
-
             this.nemesis.attackTimer.delay = 2500;
-
         }
-        this.infoText = this.add.text(W / 2, 20, '', { font: '18px monospace', fill: '#ffff00' }).setOrigin(0.5);
+
+        this.infoText      = this.add.text(W / 2, 20, '', { font: '18px monospace', fill: '#ffff00' }).setOrigin(0.5);
         this.countdownText = this.add.text(W / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
-        this.alertText = this.add.text(W / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
-        this.buffHintText = this.add.text(W / 2, H - 40, '', {
-
+        this.alertText     = this.add.text(W / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
+        this.buffHintText  = this.add.text(W / 2, H - 40, '', {
             fontFamily: 'Arial, sans-serif', fontSize: '26px', color: '#ffd700', fontStyle: 'italic', align: 'center',
-
         }).setOrigin(0.5).setDepth(20);
-
 
         // ── Buff pendiente ────────────────────────────────────
         const registryPendingBuff = this.registry.get('pendingBuff');
@@ -275,22 +281,18 @@ Redibuja los vectores rounded de salud y actualiza la barra de energía del ataq
         const pctJugador = Math.max(0, this.paciente.hp / 150);
         const pctEnemigo = Math.max(0, this.nemesis.hp / 100);
 
-        // 🛠️ RENDER JUGADOR
-        const playerBarX = 150; 
-        const playerColor = 0x00ff88; 
+        const playerBarX = 150;
+        const playerColor = 0x00ff88;
         this._renderizarBarraRounded(this.graphicsHPJugador, playerBarX, topY - (barH / 2), barW, barH, cornerRadius, pctJugador, playerColor, false);
 
-        // 🛠️ RENDER ENEMIGO (🔥 BUG FIX: Se removió 'window.' para evitar NaN)
-        const enemyBarX = W - barW - 150; 
-        const enemyColor = 0xff3333; 
+        const enemyBarX = W - barW - 150;
+        const enemyColor = 0xff3333;
         this._renderizarBarraRounded(this.graphicsHPEnemigo, enemyBarX, topY - (barH / 2), barW, barH, cornerRadius, pctEnemigo, enemyColor, true);
 
-        // Actualización síncrona de la barra del Súper
         if (this.superBar) {
             this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
         }
 
-        // Despliegue de frases psicológicas
         const active   = this.buffSystem.getActiveBuffs();
         const lastBuff = this.registry.get('lastBuff');
         const hints = {
@@ -312,16 +314,25 @@ Redibuja los vectores rounded de salud y actualiza la barra de energía del ataq
         if (Math.random() < blockChance) {
             this.infoText.setText('¡Bloqueado por el Némesis!');
             this.alertText.setText('¡BLOQUEO!');
-            this.enemigo.setTint(0x555555);
             this.audioSystem?.playGolpePaciente();
-            this.time.delayedCall(150, () => {
-                this.enemigo.clearTint();
-                this.alertText.setText('');
+
+            // Animación de bloqueo: secuencia manual de texturas para evitar
+            // conflictos con el sistema de animaciones de Phaser al interrumpir enemigo_idle
+            this.enemigo.stop();
+            this.enemigo.setTexture('bloqueo2');
+            this.time.delayedCall(80, () => {
+                if (!this.enemigo?.active) return;
+                this.enemigo.setTexture('bloqueo1');
+                this.time.delayedCall(80, () => {
+                    if (!this.enemigo?.active) return;
+                    this.enemigo.play('enemigo_idle', true);
+                    this.alertText.setText('');
+                });
             });
         } else {
             let damageCalculado = tipo.includes('BAJO') ? 8 : 12;
             let esCritico = false;
-            
+
             if (this.paciente.critDamage > 0 && Math.random() < 0.35) {
                 const extraDamage = Math.round(damageCalculado * (this.paciente.critDamage / 100));
                 damageCalculado += extraDamage;
@@ -330,14 +341,12 @@ Redibuja los vectores rounded de salud y actualiza la barra de energía del ataq
 
             this.nemesis.hp -= damageCalculado;
 
-            // ── Sprite recibir golpe del nemesis ──────────────
             const esIzq = tipo.includes('IZQ');
             this.enemigo.setTexture(esIzq ? 'hamburguesa_golpe_izq_1' : 'hamburguesa_golpe_der_1');
             this.time.delayedCall(250, () => {
                 if (this.enemigo?.active) this.enemigo.play('enemigo_idle', true);
             });
 
-            // ── Sonido ────────────────────────────────────────
             this.audioSystem?.playGolpePaciente();
 
             if (esCritico) {
@@ -400,6 +409,7 @@ Ejecuta la animación y reducción masiva de salud por el Súper Golpe de Espaci
 /* ---------------------------------------------
 ¿Qué hace?
 Procesa los golpes entrantes de la hamburguesa, validando esquives perfectos o mitigaciones por guardia.
+FIX: Ahora reproduce la animación 'bloqueo_derecho' en el sprite del jugador al bloquear.
 ------------------------------------------- */
     procesarGolpeNemesis(data = {}) {
         if (this.paciente.hp <= 0) return;
@@ -442,7 +452,6 @@ Procesa los golpes entrantes de la hamburguesa, validando esquives perfectos o m
             this.infoText.setText(`Guardia firme (-${chipDamage} HP)`);
             this.cameras.main.shake(50, 0.005);
         } else {
-            // ── Sprite recibir golpe del paciente ─────────────
             this.audioSystem?.playGolpeHamburguesa();
             const texRecibir = direccion === 'IZQUIERDA' ? 'paciente_recibir_1' : 'paciente_recibir_2';
             this.jugador.setTexture(texRecibir);
@@ -491,7 +500,7 @@ Enrutador estratégico del juego. Decide si mandarte a la pantalla de KO o levan
             const coachData = {
                 currentRound: this.currentRound + 1,
                 playerHp: this.paciente.hp,
-                playerMaxHp: this.paciente.maxHp || 150, 
+                playerMaxHp: this.paciente.maxHp || 150,
                 playerEnergy: this.paciente.superMeter || 0
             };
 
@@ -575,7 +584,7 @@ Trazador geométrico con curvatura antialias nativa de Phaser para el HUD arcade
 
         graphics.fillStyle(0xffffff, 1);
         graphics.fillRoundedRect(x, y, width, height, radius);
-        
+
         const padding = 4;
         const innerH = height - (padding * 2);
         const maxInnerW = width - (padding * 2);

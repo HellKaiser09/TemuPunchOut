@@ -22,8 +22,9 @@ CRÍTICA. Es la raíz de la jugabilidad del usuario; sin esto, el jugador no se 
         this.scene = scene;
         this.hp = 150;
         this.maxHp = 150;
-        this.damage = 10;
+        this.damage = 6;
         this.superMeter = 0;
+        this.superCost = 50
         this.baseY = y;
         this.state = "NEUTRAL";
         this.lastDodgeDirection = "NINGUNA";
@@ -95,7 +96,9 @@ CRÍTICA. Es el detector de reflejos del juego. Si se detiene, el jugador queda 
         else if (Phaser.Input.Keyboard.JustDown(k.punchAltoDer)) this.executePunch('ALTO_DER',  30, this.baseY - 40);
 
         // Super
-        else if (Phaser.Input.Keyboard.JustDown(k.superKey) && this.superMeter >= 100) this.executeSuperAttack();
+        else if (Phaser.Input.Keyboard.JustDown(k.superKey) && this.superMeter >= this.superCost) {
+            this.executeSuperAttack();
+        }
     }
 
 /* ---------------------------------------------

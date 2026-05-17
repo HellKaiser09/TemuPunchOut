@@ -31,6 +31,7 @@ export class BootScene extends Phaser.Scene {
         this.load.audio('sfx_golpe_hamburguesa_1', 'src/assets/sounds/golpe 1 hamburguesa.mp3');
         this.load.audio('sfx_golpe_hamburguesa_2', 'src/assets/sounds/golpe 2 hamburguesa.mp3');
         this.load.audio('sfx_golpe_hamburguesa_3', 'src/assets/sounds/golpe 3 hamburguesa.mp3');
+        
 
         this.load.audio('sfx_golpe_paciente_1', 'src/assets/sounds/golpe 1 paciente.mp3');
         this.load.audio('sfx_golpe_paciente_2', 'src/assets/sounds/golpe 2 paciente.mp3');
@@ -81,9 +82,21 @@ export class BootScene extends Phaser.Scene {
         this.load.image('hamburguesa_idle_2', 'src/assets/sprites/iddlenemesis2.png');
         this.load.image('hamburguesa_idle_3', 'src/assets/sprites/iddlenemesis3.png');
 
-        // Recibir golpe paciente
-        this.load.image('paciente_recibir_1', 'src/assets/sprites/recibirgolpe1.png');
-        this.load.image('paciente_recibir_2', 'src/assets/sprites/recibirgolpe2.png');
+        // Bloqueo hamburguesa
+        this.load.image('bloqueo1', 'src/assets/sprites/bloqeo1.png');
+        this.load.image('bloqueo2', 'src/assets/sprites/bloqeo2.png');
+        this.load.image('bloqueo3', 'src/assets/sprites/bloqeo3.png');
+        this.load.image('bloqueo4', 'src/assets/sprites/bloqeo4.png');
+
+
+        //victoria final
+        this.load.image('Fondo_victoria', 'src/assets/sprites/hambueguesa_oendeja_llorando.png');
+
+
+
+        //PERFIL DE BARRAS DE VIDA 
+        this.load.image('perfilburguer', "src/assets/sprites/perfilburguer.png")
+        this.load.image('perfilpaciente', "src/assets/sprites/perfilpaciente.png")
 
         const loadingText = this.add.text(400, 250, 'Cargando...', {
             font: '24px Arial', fill: '#fff'
@@ -95,6 +108,16 @@ export class BootScene extends Phaser.Scene {
     }
 
     create() {
+
+        this.anims.create({
+            key: 'bloqueo_derecho',
+            frames: [
+                { key: 'bloqueo2' },
+                { key: 'bloqueo1' },
+            ],
+            frameRate: 12,
+            repeat: 0
+        });
 
         // Registrar animaciones globales una sola vez al iniciar el juego
         this.anims.create({
