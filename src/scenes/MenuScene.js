@@ -23,28 +23,42 @@ ALTA. Es la primera interacción real del usuario con tu sistema.
         const W = this.scale.width;
         const H = this.scale.height;
 
-        // 🖼️ ANCLAJE DEL ARTE FINAL
         if (this.textures.exists('bg_menu')) {
             this.add.image(W / 2, H / 2, 'bg_menu').setDisplaySize(W, H);
             this.add.image(W * 0.67, H * 0.54, 'coach_character_menu').setOrigin(0.44);
         } else {
-            this.add.rectangle(W / 2, H / 2, W, H, 0x111122); 
+            this.add.rectangle(W / 2, H / 2, W, H, 0x111122);
         }
 
-        // 🕹️ CONFIGURACIÓN DE OPCIONES
+        const introLines = [
+            { speaker: 'dr',      text: '¿Y dígame... por qué se encuentra aquí hoy?' },
+            { speaker: 'patient', text: 'Bueno... es que tengo un problema. Soy estudiante de diseño gráfico y me da mucho miedo que cuando me gradúe solo pueda terminar trabajando en una tienda de comida rápida.' },
+            { speaker: 'dr',      text: 'Ajá.' },
+            { speaker: 'dr',      text: '¿Y eso le quita el sueño?' },
+            { speaker: 'patient', text: 'Sí, bastante.' },
+            { speaker: 'dr',      text: 'Perfecto.' },
+            { speaker: 'patient', text: '¿...Perfecto?' },
+            { speaker: 'dr',      text: 'Recuéstese en el sillón. Cierre los ojos.' },
+            { speaker: 'dr',      text: 'Que empieza... la Terapia de Choque.' },
+            { speaker: 'patient', text: 'Oiga, doctor... ¿esto es normal? Siento que me estoy—' },
+        ];
+
         const opciones = [
-            { 
-                label: 'PLAY', 
-                action: () => {
-                    const introLines = [{ speaker: 'system', text: '◈ SESIÓN DE IMPACTO: Prepárate para el Round 1.' }];
-                    this.scene.start('DialogueScene', { lines: introLines, nextScene: 'CombatScene' });
-                } 
-            },
+            {
+                
+    label: 'PLAY',
+    action: () => {
+        this.cameras.main.fade(400, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+            this.scene.start('IntroScene');
+        });
+    }
+},
+            
             { label: 'CRÉDITOS', action: () => this._abrirCreditos() },
             { label: 'TUTORIAL', action: () => this.scene.start('TutorialScene') },
         ];
 
-        // Renderizado secuencial de los botones
         opciones.forEach((op, i) => {
             this._menuItem(130, 570 + i * 210, op.label, op.action);
         });
@@ -70,42 +84,38 @@ ALTA. Mantiene el código de `create()` limpio al encapsular toda la lógica mat
         const buttonW = 520;
         const buttonH = 135;
 
-        // 🎨 EL HOVER DEL BOCETO
         const hoverGfx = this.add.graphics();
-        hoverGfx.setVisible(false); 
+        hoverGfx.setVisible(false);
 
-        hoverGfx.fillStyle(0xf0ede6, 1); 
+        hoverGfx.fillStyle(0xf0ede6, 1);
         hoverGfx.beginPath();
-        hoverGfx.moveTo(x, y - buttonH / 2);               
-        hoverGfx.lineTo(x + 860, y - buttonH / 2);         
-        hoverGfx.lineTo(x + 790, y + buttonH / 2);         
-        hoverGfx.lineTo(x, y + buttonH / 2);               
+        hoverGfx.moveTo(x,       y - buttonH / 2);
+        hoverGfx.lineTo(x + 860, y - buttonH / 2);
+        hoverGfx.lineTo(x + 790, y + buttonH / 2);
+        hoverGfx.lineTo(x,       y + buttonH / 2);
         hoverGfx.closePath();
         hoverGfx.fillPath();
 
-        // 📝 TEXTO BASE 
-        const texto = this.add.text(x + 45, y, label, { 
-            fontFamily: FONT_TITULOS,
+        const texto = this.add.text(x + 45, y, label, {
+            fontFamily: '"Bowlby One SC", Impact, sans-serif',
             fontSize: '60px',
             color: '#ffffff',
             stroke: '#000000',
             strokeThickness: 8,
         }).setOrigin(0, 0.5);
 
-        // 🕹️ ZONA INTERACTIVA INVISIBLE
         const zona = this.add.rectangle(x + buttonW / 2, y, buttonW, buttonH, 0xffffff, 0)
             .setOrigin(0.5)
             .setInteractive({ useHandCursor: true });
 
-        // --- CONTROL DE EVENTOS DINÁMICOS ---
         zona.on('pointerover', () => {
-            hoverGfx.setVisible(true); 
-            texto.setColor('#16213e').setStroke('#16213e', 0); 
+            hoverGfx.setVisible(true);
+            texto.setColor('#16213e').setStroke('#16213e', 0);
         });
 
         zona.on('pointerout', () => {
-            hoverGfx.setVisible(false); 
-            texto.setColor('#ffffff').setStroke('#000000', 8); 
+            hoverGfx.setVisible(false);
+            texto.setColor('#ffffff').setStroke('#000000', 8);
         });
 
         zona.on('pointerdown', onClick);
@@ -131,31 +141,34 @@ MEDIA. Es una pantalla informativa que demuestra un buen manejo de contenedores 
         const W = this.scale.width;
         const H = this.scale.height;
 
-        // 1. Fondo de aislamiento
-        const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.87).setInteractive();
+        const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.87)
+            .setInteractive();
+
         const contenedor = this.add.container(0, 0);
 
-        // 2. Título "CRÉDITOS"
         const titulo = this.add.text(110, 80, 'CRÉDITOS', {
             fontFamily: FONT_TITULOS, fontSize: '60px', color: '#ffffff', letterSpacing: 4
         });
 
         // 3. Lista de nombres y cargos
         const staff = [
-            { cargo: 'PROGRAMACIÓN', nombre: 'GERSON SORIA' },
-            { cargo: 'PROGRAMACIÓN', nombre: 'JESÚS ORNELAS' },
-            { cargo: 'ARTE Y ANIMACIÓN', nombre: 'MARIA RENE' },
-            { cargo: 'ARTE Y ANIMACIÓN', nombre: 'DIANA CANTÚ' },
-            { cargo: 'ARTE Y ANIMACIÓN', nombre: 'ELIUD ESPINOZA' },
-            { cargo: 'MÚSICA Y SFX', nombre: 'MARIA RENE' },
-            { cargo: 'DISEÑO DE NIVELES', nombre: 'TODOS' }
+            { cargo: 'PROGRAMACIÓN',      nombre: 'GERSON SORIA'   },
+            { cargo: 'PROGRAMACIÓN',      nombre: 'JESÚS ORNELAS'  },
+            { cargo: 'ARTE Y ANIMACIÓN',  nombre: 'MARIA RENE'     },
+            { cargo: 'ARTE Y ANIMACIÓN',  nombre: 'DIANA CANTÚ'    },
+            { cargo: 'ARTE Y ANIMACIÓN',  nombre: 'ELIUD ESPINOZA' },
+            { cargo: 'MÚSICA Y SFX',      nombre: 'MARIA RENE'     },
+            { cargo: 'DISEÑO DE NIVELES', nombre: 'TODOS'          },
         ];
 
         staff.forEach((persona, i) => {
-            const yBase = 200 + (i * 90); 
+            const yBase = 200 + i * 90;
 
             const cargoTxt = this.add.text(115, yBase, persona.cargo, {
-                fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold', color: '#8a8a9a', letterSpacing: 2
+                fontFamily: 'monospace',
+                fontSize: '14px',
+                color: '#8a8a9a',
+                letterSpacing: 2
             });
 
             const nombreTxt = this.add.text(115, yBase + 22, persona.nombre, {
@@ -172,7 +185,6 @@ MEDIA. Es una pantalla informativa que demuestra un buen manejo de contenedores 
 
         contenedor.add([titulo, btnVolver]);
 
-        // 🔒 Lógica de salida
         const cerrarCreditos = () => {
             // Hacemos que el contenedor se desvanezca suavemente
             this.tweens.add({
@@ -188,7 +200,7 @@ MEDIA. Es una pantalla informativa que demuestra un buen manejo de contenedores 
         };
 
         btnVolver.on('pointerover', () => btnVolver.setColor('#ffd700'));
-        btnVolver.on('pointerout', () => btnVolver.setColor('#ffffff'));
+        btnVolver.on('pointerout',  () => btnVolver.setColor('#ffffff'));
         btnVolver.on('pointerdown', cerrarCreditos);
         overlay.on('pointerdown', cerrarCreditos);
 

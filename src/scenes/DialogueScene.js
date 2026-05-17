@@ -5,21 +5,16 @@ export class DialogueScene extends Phaser.Scene {
     }
 
     init(data) {
-        this.lines = data.lines || [];
-        this.nextScene = data.nextScene || 'CombatScene';
-        this.nextData = data.nextData || {};
-        
-        // Variables para el HUD superior (Vidas reales)
-        this.playerHp = data.playerHp ?? 150;
-        this.playerMaxHp = data.playerMaxHp ?? 150;
-        this.nemesisHp = data.nemesisHp ?? 100;
-        this.nemesisMaxHp = data.nemesisMaxHp ?? 100;
-        
-        // Flag: Si es true, al terminar el diálogo pasaremos a CoachScene
-        this.mostrarMenuCoach = data.mostrarMenuCoach || false;
+    this.lines         = data.lines          || [];
+    this.nextScene     = data.nextScene      || 'CombatScene';
+    this.nextData      = data.nextData       || {};
+    this.onFinishEvent = data.onFinishEvent  || null;
+    this.typing        = false;
+    this.fullText      = '';
+    this.charIndex     = 0;
+    this.typTimer      = null;
+}
 
-        this.currentIndex = 0;
-    }
 
     create() {
         const W = this.scale.width;
@@ -28,12 +23,113 @@ export class DialogueScene extends Phaser.Scene {
         // 1. 🖼️ FONDO
         this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H);
 
-        // 2. 🍔 PERSONAJES (CORREGIDOS)
-        // Paciente a la izquierda, Coach y Némesis a la derecha
-        this.chars = {
-            paciente: this.add.sprite(W * 0.20, H, 'paciente_idle').setOrigin(0.5, 1).setScale(1.1).setAlpha(0.6),
-            coach: this.add.sprite(W * 0.80, H, 'coach_eleccion').setOrigin(0.5, 1).setScale(0.9).setAlpha(0).setVisible(false),
-            nemesis: this.add.sprite(W * 0.80, H + 20, 'hamburguesa_golpe_izq', 0).setOrigin(0.5, 1).setScale(0.35).setAlpha(0.6)
+        // ── Caja de diálogo ──────────────────────────────────────────────────
+        const boxH = 220;
+        const boxY = H - boxH/2 - 10;
+
+        this.add.rectangle(W/2, boxY, W - 40, boxH, 0x0d0d1a, 0.97)
+            .setStrokeStyle(1.5, 0xffd700);
+
+        // ── Retrato ──────────────────────────────────────────────────────────
+        this.portraitImg = this.add.image(70, boxY, '__DEFAULT')
+            .setVisible(false)
+            .setScale(0.45);
+
+        // ── Textos ───────────────────────────────────────────────────────────
+        this.speakerText = this.add.text(110, boxY - 58, '', {
+            fontSize: '40px', fontFamily: 'monospace',
+            color: '#ffd700', fontStyle: 'bold',
+        });
+
+        const bodyWidth = W - 180;
+        this.bodyHeight = boxH - 70;
+        this.bodyText = this.add.text(110, boxY - 38, '', {
+            fontSize: '44px', fontFamily: 'sans-serif',
+            color: '#f0ede6', wordWrap: { width: bodyWidth },
+            lineSpacing: 6,
+        });
+
+        this.measureText = this.add.text(0, 0, '', {
+            fontSize: '44px', fontFamily: 'sans-serif',
+            wordWrap: { width: bodyWidth },
+            lineSpacing: 6,
+        }).setVisible(false);
+
+        // ── Indicador de avance ──────────────────────────────────────────────
+        this.prompt = this.add.text(W - 30, boxY + boxH/2 - 10, '▶', {
+            fontSize: '40px', color: '#ffd700', fontFamily: 'monospace',
+        }).setOrigin(1, 1);
+
+        this.tweens.add({
+            targets: this.prompt, alpha: 0,
+            duration: 500, yoyo: true, repeat: -1,
+        });
+
+        this.dialogSystem = new DialogueSystem(this);
+        this.dialogSystem.load(this.lines, () => this._finish());
+
+        this._showCurrent();
+
+        this.input.keyboard.on('keydown', this._onAdvance, this);
+        this.input.on('pointerdown', this._onAdvance, this);
+    }
+
+    _showCurrent() {
+        const line = this.dialogSystem.current();
+        if (!line) return;
+
+        const cfg = SPEAKER_CONFIG[line.speaker] || SPEAKER_CONFIG.silent;
+
+        if (cfg.portrait && this.textures.exists(cfg.portrait)) {
+            this.portraitImg.setTexture(cfg.portrait).setVisible(true);
+            this.portraitImg.setX(cfg.side === 'right' ? this.scale.width - 70 : 70);
+        } else {
+            this.portraitImg.setVisible(false);
+        }
+
+        this.speakerText
+            .setText(cfg.name)
+            .setColor(cfg.nameColor)
+            .setFontFamily(cfg.mono ? 'monospace' : 'sans-serif');
+
+        const textX = cfg.portrait && cfg.side === 'left' ? 110 : 30;
+        this.bodyText.setX(textX);
+
+        this.fullText  = line.text;
+        this.pages     = this._paginateText(this.fullText, cfg);
+        this.pageIndex = 0;
+        this._currentConfig = cfg;
+        this._showPage(cfg);
+    }
+
+    _showPage(cfg) {
+        const pageText = this.pages[this.pageIndex] || '';
+
+        this.charIndex = 0;
+        this.typing    = true;
+        this.bodyText.setText('').setColor(cfg.textColor)
+            .setFontStyle(cfg.italic ? 'italic' : 'normal');
+
+        if (this.typTimer) this.typTimer.remove();
+        this.typTimer = this.time.addEvent({
+            delay: 25,
+            repeat: pageText.length - 1,
+            callback: () => {
+                this.charIndex++;
+                this.bodyText.setText(pageText.substring(0, this.charIndex));
+                if (this.charIndex >= pageText.length) this.typing = false;
+            },
+        });
+    }
+
+    _paginateText(text, cfg) {
+        const pages = [];
+        const words = text.split(' ');
+        let pageText = '';
+
+        const measure = (value) => {
+            this.measureText.setText(value);
+            return this.measureText.height <= this.bodyHeight;
         };
 
         // 3. 💬 CAJA DE DIÁLOGO
@@ -43,78 +139,68 @@ export class DialogueScene extends Phaser.Scene {
         graphics.fillStyle(0xffffff, 1);
         graphics.fillRoundedRect((W - boxW) / 2, H - 160, boxW, boxH, 40);
 
-        this.speakerText = this.add.text((W - boxW) / 2 + 40, H - 195, '', {
-            fontFamily: '"Bowlby One SC", sans-serif', fontSize: '28px', color: '#ffd700', stroke: '#000', strokeThickness: 6
-        });
-        
-        this.dialogueText = this.add.text((W - boxW) / 2 + 50, H - 135, '', {
-            fontFamily: 'sans-serif', fontSize: '22px', color: '#000', wordWrap: { width: boxW - 100 }
-        });
+            if (measure(candidate)) {
+                pageText = candidate;
+                continue;
+            }
 
-        // 5. 🖱️ INTERACCIÓN
-        this.input.on('pointerdown', () => this._avanzarDialogo());
-        this._mostrarLinea();
-        
-        this.cameras.main.fadeIn(300, 0, 0, 0);
-    }
-
-    _resaltarHablante(speaker) {
-        Object.values(this.chars).forEach(c => {
-            this.tweens.add({ targets: c, alpha: 0.5, duration: 200 });
-        });
-
-        let charActivo = null;
-        if (speaker === 'patient') charActivo = this.chars.paciente;
-        if (speaker === 'dr' || speaker === 'coach') {
-            this.chars.nemesis.setVisible(false);
-            charActivo = this.chars.coach;
-        } else if (speaker === 'nemesis') {
-            this.chars.coach.setVisible(false);
-            charActivo = this.chars.nemesis;
-        }
-
-        if (charActivo) {
-            charActivo.setVisible(true);
-            this.tweens.add({ targets: charActivo, alpha: 1, duration: 200 });
-        }
-    }
-
-    _mostrarLinea() {
-        const linea = this.lines[this.currentIndex];
-        this._resaltarHablante(linea.speaker);
-        
-        let nombreMostrado = '';
-        switch (linea.speaker) {
-            case 'patient': nombreMostrado = 'PACIENTE'; break;
-            case 'dr': nombreMostrado = 'DR. PROYECTADO'; break;
-            case 'nemesis': nombreMostrado = 'NÉMESIS'; break;
-            case 'system': nombreMostrado = 'SISTEMA'; break;
-            default: nombreMostrado = linea.speaker.toUpperCase();
-        }
-
-        this.speakerText.setText(nombreMostrado);
-        this.dialogueText.setText(linea.text);
-    }
-
-    _avanzarDialogo() {
-        this.currentIndex++;
-        if (this.currentIndex < this.lines.length) {
-            this._mostrarLinea();
-        } else {
-            this.input.enabled = false;
-            this.cameras.main.fade(400, 0, 0, 0);
-            this.cameras.main.once('camerafadeoutcomplete', () => {
-                
-                // 🔥 ENRUTAMIENTO: Aquí está la magia que pedías
-                if (this.mostrarMenuCoach) {
-                    // Si el flag está activo, saltamos a TU CoachScene original
-                    this.scene.start('CoachScene', this.nextData);
-                } else {
-                    // Si no, vamos a donde diga nextScene (CombatScene o EndScene)
-                    this.scene.start(this.nextScene, this.nextData);
+            if (!pageText) {
+                let partial = '';
+                for (const char of word) {
+                    const nextText = partial + char;
+                    if (!measure(nextText)) break;
+                    partial = nextText;
                 }
+                if (partial) {
+                    pages.push(partial);
+                    const remainder = word.slice(partial.length);
+                    words[i] = remainder;
+                    pageText = '';
+                    i--;
+                    continue;
+                }
+            }
 
-            });
+            pages.push(pageText);
+            pageText = word;
+        }
+
+        if (pageText) pages.push(pageText);
+        return pages.length ? pages : [text];
+    }
+
+    _onAdvance() {
+        if (this.typing) {
+            if (this.typTimer) this.typTimer.remove();
+            this.bodyText.setText(this.pages[this.pageIndex] || this.fullText);
+            this.typing = false;
+            return;
+        }
+
+        if (this.pageIndex < this.pages.length - 1) {
+            this.pageIndex++;
+            this._showPage(this._currentConfig);
+            return;
+        }
+
+        this.dialogSystem.advance(); // avanza; si termina llama onFinish → _finish
+        if (!this.dialogSystem.isFinished()) {
+            this._showCurrent();
         }
     }
+
+    _finish() {
+    this.tweens.add({
+        targets: this.cameras.main, alpha: 0, duration: 300,
+        onComplete: () => {
+            // Emite el evento a CombatScene si se configuró uno
+            if (this.onFinishEvent) {
+                const combatScene = this.scene.get('CombatScene');
+                if (combatScene) combatScene.events.emit(this.onFinishEvent);
+            }
+            this.scene.stop('DialogueScene');
+        },
+    });
+}
+
 }

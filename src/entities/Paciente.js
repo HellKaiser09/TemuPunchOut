@@ -36,6 +36,7 @@ CRÍTICA. Es la raíz de la jugabilidad del usuario; sin esto, el jugador no se 
         this.maxConsecutive = 3;
         this.fatigueCooldownMs = 800;
         this.lastPunchTime = 0;
+        this.lastPunchType = null; // 🥊 Rastrear tipo de golpe para sprite visual
 
         // ── Duck mantenido ────────────────────────────────────
         this.isDucking = false;
@@ -175,6 +176,7 @@ CRÍTICA. Es el núcleo de ataque del gameplay loop.
 
         this.punchCooldown = true;
         this.state = 'ATACANDO';
+        this.lastPunchType = tipo; // 🥊 Guardar tipo de golpe para el sprite visual
 
         this.scene.procesarGolpeJugador(tipo);
 

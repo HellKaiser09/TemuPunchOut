@@ -69,6 +69,8 @@ ALTA. Evita que el jugador memorice un patrón exacto.
         const elegido  = Phaser.Utils.Array.GetRandom(opciones);
         this.ultimoAtaque = elegido;
 
+        console.log(`[Nemesis] elegirAtaque -> opciones: ${JSON.stringify(opciones)}, elegido: ${elegido}`);
+
         switch (elegido) {
             case 'IZQUIERDA': this.atacarLateral('IZQUIERDA'); break;
             case 'DERECHA':   this.atacarLateral('DERECHA');   break;
@@ -97,6 +99,10 @@ ALTA. Es el ataque principal del juego.
 
         const offsetX = direccion === 'IZQUIERDA' ? -90 : 90;
 
+        console.log(`[Nemesis] atacarLateral -> direccion: ${direccion}, offsetX: ${offsetX}`);
+
+        console.log(`[Nemesis] atacarLateral -> direccion: ${direccion}, offsetX: ${offsetX}`);
+
         // Fase 1: PREPARAR 
         this.scene.events.emit('nemesis-preparar', direccion);
         this._mostrarAlerta(`⚠ Golpe ${direccion}`, 1400);
@@ -108,6 +114,7 @@ ALTA. Es el ataque principal del juego.
         // Fase 2: DURANTE 
         this.scene.time.delayedCall(1500, () => {
             this.state = 'ATACANDO';
+            console.log(`[Nemesis] emitir evento 'nemesis-atacar' -> ${direccion}`);
             this.scene.events.emit('nemesis-atacar', direccion);
 
             this.scene.tweens.add({

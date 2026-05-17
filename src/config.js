@@ -5,6 +5,11 @@ import { CombatScene }  from './scenes/CombatScene.js';
 import { EndScene }     from './scenes/EndScene.js';
 import {CoachScene}       from './scenes/CoachScene.js'; // Ojo aquí, no tiene llaves
 import { TutorialScene } from './scenes/TutorialScene.js';
+import { IntroScene }    from './scenes/IntroScene.js';
+
+
+// En el array de escenas:
+
 
 /* ---------------------------------------------
 ¿Qué hace?
@@ -32,5 +37,6 @@ export const config = {
         mode: Phaser.Scale.FIT, // Encoge o estira el juego manteniendo la proporción
         autoCenter: Phaser.Scale.CENTER_BOTH // Lo centra en medio de la pantalla
     },
-    scene: [BootScene, MenuScene, CombatScene, DialogueScene, CoachScene, EndScene, TutorialScene]
+    scene: [BootScene, MenuScene, IntroScene, TutorialScene, CombatScene, DialogueScene, CoachScene, EndScene]
+    
 };
