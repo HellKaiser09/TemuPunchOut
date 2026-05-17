@@ -414,19 +414,24 @@ Importancia
 CRÍTICA. Es la compuerta de escape que devuelve el control al loop principal del juego.
 ------------------------------------------- */
 _finish() {
-        // 🚨 SOLUCIÓN AL BUG 1: Desconectamos los escuchadores globales de inmediato
-        // Si no hacemos esto, los clics se acumularán round tras round
+        // Desconectamos los escuchadores globales para sanar la memoria RAM
         this.input.keyboard.off('keydown', this._onAdvance, this);
         this.input.off('pointerdown', this._onAdvance, this);
 
         this.tweens.add({
             targets: this.cameras.main, alpha: 0, duration: 300,
             onComplete: () => {
+                // Caso 1: Flujo del Coach (Usa el bus de eventos)
                 if (this.onFinishEvent) {
                     const combatScene = this.scene.get('CombatScene');
                     if (combatScene) combatScene.events.emit(this.onFinishEvent);
+                    this.scene.stop('DialogueScene');
+                } 
+                // Caso 2: Flujo de Resurrección / Final (Usa enrutamiento directo de escena)
+                // 🔥 ¡ESTO EVITA EL PANTALLAZO GRIS!
+                else {
+                    this.scene.start(this.nextScene, this.nextData);
                 }
-                this.scene.stop('DialogueScene');
             },
         });
     }
