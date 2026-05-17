@@ -1,6 +1,7 @@
 import { Paciente } from '../entities/Paciente.js';
 import { Nemesis } from '../entities/Nemesis.js';
 import { BuffSystem } from '../systems/BuffSystem.js';
+import { AudioSystem } from '../systems/AudioSystem.js';
 
 export class CombatScene extends Phaser.Scene {
 /* ---------------------------------------------
@@ -33,63 +34,153 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
         this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H);
         this.cameras.main.fadeIn(500, 0, 0, 0);
 
+        // ── Animaciones ───────────────────────────────────────
+        if (!this.anims.exists('enemigo_batazo_izq')) {
+            this.anims.create({
+                key: 'enemigo_batazo_izq',
+                frames: [
+                    { key: 'hamburguesa_golpe_izq_1' },
+                    { key: 'hamburguesa_golpe_izq_2' },
+                    { key: 'hamburguesa_golpe_izq_3' },
+                ],
+                frameRate: 12, repeat: 0
+            });
+        }
+
+
+        
+        if (!this.anims.exists('enemigo_batazo_der')) {
+            this.anims.create({
+                key: 'enemigo_batazo_der',
+                frames: [
+                    { key: 'hamburguesa_golpe_der_1' },
+                    { key: 'hamburguesa_golpe_der_2' },
+                    { key: 'hamburguesa_golpe_der_3' },
+                ],
+                frameRate: 12, repeat: 0
+            });
+        }
+
+        if (!this.anims.exists('enemigo_batazo_arriba')) {
+            this.anims.create({
+                key: 'enemigo_batazo_arriba',
+                frames: [
+                    { key: 'hamburguesa_arriba_1' },
+                    { key: 'hamburguesa_arriba_2' },
+                    { key: 'hamburguesa_arriba_3' },
+                ],
+                frameRate: 10, repeat: 0
+            });
+        }
+
+        if (!this.anims.exists('enemigo_especial')) {
+            this.anims.create({
+                key: 'enemigo_especial',
+                frames: [
+                    { key: 'hamburguesa_especial_1' },
+                    { key: 'hamburguesa_especial_2' },
+                    { key: 'hamburguesa_especial_3' },
+                    { key: 'hamburguesa_especial_4' },
+                ],
+                frameRate: 6, repeat: -1
+            });
+        }
+
+        if (!this.anims.exists('enemigo_idle')) {
+            this.anims.create({
+                key: 'enemigo_idle',
+                frames: [
+                    { key: 'hamburguesa_idle_1' },
+                    { key: 'hamburguesa_idle_2' },
+                    { key: 'hamburguesa_idle_3' },
+                ],
+                frameRate: 4, repeat: -1
+            });
+        }
+
+        // ── Entidades ─────────────────────────────────────────
         this.nemesis  = new Nemesis(this, W / 2, H / 2 - 50);
         this.paciente = new Paciente(this, W / 2, H - 120);
         this.paciente.hp = this.savedPatientHp;
         this.nemesis.setVisible(false);
         this.paciente.setVisible(false);
 
-        this.enemigo = this.add.sprite(this.nemesis.x, this.nemesis.y + 60, 'hamburguesa_golpe_izq_1');
+        // ── Sprite enemigo ────────────────────────────────────
+        this.enemigo = this.add.sprite(this.nemesis.x, this.nemesis.y + 60, 'hamburguesa_idle_1');
         this.enemigo.setScale(0.70).setDepth(10).setVisible(true);
+        this.enemigo.play('enemigo_idle');
 
         this.enemigo.on('animationcomplete', (anim) => {
-            if (anim.key === 'enemigo_batazo_izq' || anim.key === 'enemigo_batazo_der') {
-                this.enemigo.setTexture('hamburguesa_golpe_izq_1');
+            if (anim.key === 'enemigo_batazo_izq' ||
+                anim.key === 'enemigo_batazo_der'  ||
+                anim.key === 'enemigo_batazo_arriba') {
+                this.enemigo.play('enemigo_idle');
             }
         });
 
+        // ── Sprite jugador ────────────────────────────────────
         this.jugador = this.add.sprite(this.paciente.x, this.paciente.y, 'paciente_iddle');
         this.jugador.setScale(0.60).setDepth(5).setVisible(true);
         this.lastPacienteState = this.paciente.state;
 
+        // ── Eventos del nemesis ───────────────────────────────
         this.events.on('nemesis-atacar', (direccion) => {
-            if (direccion === 'IZQUIERDA') this.enemigo.play('enemigo_batazo_izq', true);
-            else if (direccion === 'DERECHA') this.enemigo.play('enemigo_batazo_der', true);
+            if (direccion === 'IZQUIERDA')      this.enemigo.play('enemigo_batazo_izq',    true);
+            else if (direccion === 'DERECHA')   this.enemigo.play('enemigo_batazo_der',    true);
+            else if (direccion === 'ARRIBA')    this.enemigo.play('enemigo_batazo_arriba', true);
+            else if (direccion === 'ESPECIAL')  this.enemigo.play('enemigo_especial',      true);
         });
 
+
+        this.events.on('nemesis-fin-recovery', () => {
+            if (this.enemigo?.active) {
+                this.enemigo.play('enemigo_idle', true);
+        }
+        });
+
+
+        this.events.on('nemesis-recovery', () => {
+            if (this.enemigo.anims.currentAnim?.key === 'enemigo_especial') {
+                this.enemigo.stop();
+                this.enemigo.play('enemigo_idle');
+            }
+        });
+
+        // ── Base nemesis ──────────────────────────────────────
         this.nemesis.base   = { ...(this.nemesis.base ?? {}), damage: 10 };
         this.nemesis.damage = this.nemesis.damage ?? this.nemesis.base.damage;
 
-        this.buffSystem = new BuffSystem(this, this.paciente, this.nemesis);
+        // ── Sistemas ──────────────────────────────────────────
+        this.buffSystem  = new BuffSystem(this, this.paciente, this.nemesis);
+        this.audioSystem = new AudioSystem(this);
+        this.audioSystem.playBGM('bgm_pelea');
+        this.audioSystem.playInicioPelea();
 
-        this.events.off('dialogue-next-coach');
-        this.events.on('dialogue-next-coach', () => {
-            if (!this.pendingCoachData) return;
-            const data = this.pendingCoachData;
-            this.pendingCoachData = null;
-            this.scene.start('CoachScene', data);
+        // ── Coach buff ────────────────────────────────────────
+        this.events.off('coach-buff-chosen');
+        this.events.on('coach-buff-chosen', (buffId) => {
+            this.currentRound++;
+            this.scene.restart({
+                currentRound:   this.currentRound,
+                savedPatientHp: this.paciente.hp,
+                nemesisRevived: this.nemesisRevived,
+                pendingBuff:    buffId
+            });
         });
 
-        // ── 📐 CONFIGURACIÓN GEOMÉTRICA DEL HUD DE VIDA ──
-        const topY = 70;          
-        const barW = 450;         
-        const barH = 38;          
-        const cornerRadius = 18;  
+        // ── UI ────────────────────────────────────────────────
+        this.add.text(50, 30, `Paciente (Round ${this.currentRound}):`, {
+            font: '16px Arial', fill: '#fff'
+        });
+        this.pacienteHPbar = this.add.rectangle(50, 55, 250, 20, 0x00ff00).setOrigin(0, 0.5);
+        this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
 
-        // 1. Portraits de los peleadores
-        this.avatarJugador = this.add.image(90, topY, 'paciente_caras', 0).setScale(0.5).setDepth(15);
-        this.avatarEnemigo = this.add.image(W - 90, topY, 'hamburguesa_golpe_izq', 0).setScale(0.18).setDepth(15);
+        this.add.text(50, 85, 'SÚPER:', { font: '12px monospace', fill: '#00ffff' });
+        this.superBar = this.add.rectangle(100, 92, 0, 10, 0x00ffff).setOrigin(0, 0.5);
+        this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
 
-        // 2. Componentes gráficos para curvas nativas
-        this.graphicsHPJugador = this.add.graphics().setDepth(14);
-        this.graphicsHPEnemigo = this.add.graphics().setDepth(14);
-
-        this.hudConfig = { topY, barW, barH, cornerRadius, W };
-
-        // Textos de identificación flotantes alineados con las barras
-        this.add.text(150, 25, `Paciente (Round ${this.currentRound}):`, { font: '16px Arial', fill: '#fff' }).setDepth(15);
-        this.add.text(W - 150, 25, 
-            this.nemesisRevived ? 'AUTONÉMESIS (💥 IRA CONSCIENTE)' : 'AutoNémesis', 
+        this.add.text(W - 300, 30,
+            this.nemesisRevived ? 'AUTONÉMESIS (💥 IRA CONSCIENTE)' : 'AutoNémesis',
             { font: '16px Arial', fill: '#fff' }
         ).setOrigin(1, 0).setDepth(15);
 
@@ -111,6 +202,7 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
             fontFamily: 'Arial, sans-serif', fontSize: '26px', color: '#ffd700', fontStyle: 'italic', align: 'center',
         }).setOrigin(0.5).setDepth(20);
 
+        // ── Buff pendiente ────────────────────────────────────
         const registryPendingBuff = this.registry.get('pendingBuff');
         if (!this.pendingBuff && registryPendingBuff) this.pendingBuff = registryPendingBuff;
 
@@ -181,18 +273,17 @@ Redibuja los vectores rounded de salud y actualiza la barra de energía del ataq
         const active   = this.buffSystem.getActiveBuffs();
         const lastBuff = this.registry.get('lastBuff');
         const hints = {
-            'autoestima':     '💚 Recuerda por qué elegiste el diseño.',
-            'limites':        '🚧 Tu miedo solo tiene el poder que tú le das.',
-            'vulnerabilidad': '🔥 Mostrarte es tu mayor fortaleza ahora.',
-            'perdonarte':     '🕊️ Suelta el peso. Estás más ligero.',
+            'autoestima':     ' Recuerda por qué elegiste el diseño.',
+            'limites':        ' Tu miedo solo tiene el poder que tú le das.',
+            'vulnerabilidad': ' Mostrarte es tu mayor fortaleza ahora.',
+            'perdonarte':     ' Suelta el peso. Estás más ligero.',
         };
-        this.buffHintText.setText(active.length > 0 && lastBuff ? (hints[lastBuff] || '') : '');
+
+        this.buffHintText.setText(
+            active.length > 0 && lastBuff ? (hints[lastBuff] || '') : ''
+        );
     }
 
-/* ---------------------------------------------
-¿Qué hace?
-Maneja las colisiones y el cálculo de daño ofensivo asestado al Némesis.
-------------------------------------------- */
     procesarGolpeJugador(tipo) {
         const bloqueandoPorVentana = this.nemesis.state === 'ATACANDO';
         const blockChance = bloqueandoPorVentana ? 0.70 : 0.32;
@@ -201,6 +292,7 @@ Maneja las colisiones y el cálculo de daño ofensivo asestado al Némesis.
             this.infoText.setText('¡Bloqueado por el Némesis!');
             this.alertText.setText('¡BLOQUEO!');
             this.enemigo.setTint(0x555555);
+            this.audioSystem?.playGolpePaciente();
             this.time.delayedCall(150, () => {
                 this.enemigo.clearTint();
                 this.alertText.setText('');
@@ -216,6 +308,16 @@ Maneja las colisiones y el cálculo de daño ofensivo asestado al Némesis.
             }
 
             this.nemesis.hp -= damageCalculado;
+
+            // ── Sprite recibir golpe del nemesis ──────────────
+            const esIzq = tipo.includes('IZQ');
+            this.enemigo.setTexture(esIzq ? 'hamburguesa_golpe_izq_1' : 'hamburguesa_golpe_der_1');
+            this.time.delayedCall(250, () => {
+                if (this.enemigo?.active) this.enemigo.play('enemigo_idle', true);
+            });
+
+            // ── Sonido ────────────────────────────────────────
+            this.audioSystem?.playGolpePaciente();
 
             if (esCritico) {
                 this.infoText.setText(`¡CRÍTICO! Golpe ${tipo} (-${damageCalculado} HP)`);
@@ -251,6 +353,7 @@ Maneja las colisiones y el cálculo de daño ofensivo asestado al Némesis.
 Ejecuta la animación y reducción masiva de salud por el Súper Golpe de Espacio.
 ------------------------------------------- */
     procesarSuperJugador() {
+        this.audioSystem?.playEspecial();
         this.enemigo.setTint(0x00ffff);
         this.cameras.main.flash(300, 0, 255, 255);
         this.cameras.main.shake(500, 0.03);
@@ -284,6 +387,10 @@ Procesa los golpes entrantes de la hamburguesa, validando esquives perfectos o m
         const { tipo = 'LATERAL', direccion = 'NINGUNA', dano = dañoBase } = data;
 
         if (tipo === 'ESPECIAL') {
+            this.audioSystem?.playGolpeHamburguesa();
+            this.jugador.setTexture('paciente_recibir_1');
+            this.time.delayedCall(200, () => this.jugador.setTexture('paciente_iddle'));
+
             this.paciente.hp = Math.max(0, this.paciente.hp - dano);
             this.cameras.main.shake(80, 0.01);
             if (this.paciente.hp <= 0) this.terminarCombate(false);
@@ -309,10 +416,17 @@ Procesa los golpes entrantes de la hamburguesa, validando esquives perfectos o m
             this.infoText.setText(`✓ ${razon}`);
         } else if (bloqueado) {
             const chipDamage = 2;
+            this.audioSystem?.playGolpeHamburguesa();
             this.paciente.hp = Math.max(0, this.paciente.hp - chipDamage);
             this.infoText.setText(`Guardia firme (-${chipDamage} HP)`);
             this.cameras.main.shake(50, 0.005);
         } else {
+            // ── Sprite recibir golpe del paciente ─────────────
+            this.audioSystem?.playGolpeHamburguesa();
+            const texRecibir = direccion === 'IZQUIERDA' ? 'paciente_recibir_1' : 'paciente_recibir_2';
+            this.jugador.setTexture(texRecibir);
+            this.time.delayedCall(250, () => this.jugador.setTexture('paciente_iddle'));
+
             let dañoFinal = dano;
             if (this.paciente.critDamage > 0) {
                 dañoFinal = Math.round(dañoFinal * 1.25);
@@ -338,7 +452,8 @@ Procesa los golpes entrantes de la hamburguesa, validando esquives perfectos o m
 Enrutador estratégico del juego. Decide si mandarte a la pantalla de KO o levantar el interludio cinematográfico.
 ------------------------------------------- */
     terminarCombate(victoria) {
-        this.nemesis.attackTimer.destroy(); 
+        this.nemesis.attackTimer.destroy();
+        this.audioSystem?.stopBGM();
 
         if (!victoria) {
             this.cameras.main.fade(800, 0, 0, 0);
@@ -413,22 +528,20 @@ Intercambia dinámicamente las texturas de renderizado del avatar del jugador.
 ------------------------------------------- */
     _updateJugadorTextura(estado) {
         if (!this.jugador) return;
-        let textura = 'paciente_iddle';
 
         if (estado === 'ATACANDO' && this.paciente.lastPunchType) {
             const punchMap = {
                 'ALTO_IZQ': 'paciente_arriba_izq', 'ALTO_DER': 'paciente_arriba_der',
                 'BAJO_IZQ': 'paciente_abajo_izq', 'BAJO_DER': 'paciente_abajo_der',
             };
-            textura = punchMap[this.paciente.lastPunchType] || 'paciente_iddle';
+            this.jugador.setTexture(punchMap[this.paciente.lastPunchType] || 'paciente_iddle');
         } else {
             const texturaMap = {
                 'NEUTRAL': 'paciente_iddle', 'ESQUIVE_IZQ': 'paciente_esquive_izq', 'ESQUIVE_DER': 'paciente_esquive_der',
                 'AGACHADO': 'paciente_iddle', 'BLOQUEANDO': 'paciente_iddle', 'RECOVERY': 'paciente_iddle', 'CINEMATIC': 'paciente_iddle'
             };
-            textura = texturaMap[estado] || 'paciente_iddle';
+            this.jugador.setTexture(texturaMap[estado] || 'paciente_iddle');
         }
-        this.jugador.setTexture(textura);
     }
 
 /* ---------------------------------------------

@@ -196,28 +196,6 @@ ALTA. Es el "Ultimate" del jefe.
             this.state = 'ATACANDO';
             this.scene.events.emit('nemesis-atacar', 'ESPECIAL');
 
-            // Reutilizar objetos guardados en constructor en lugar de crear/destruir
-            const letrero = this.letreroEspecial;
-            const letreroTexto = this.letreroEspecialTexto;
-            
-            letrero.setPosition(-100, this.scene.sys.game.config.height / 2);
-            letreroTexto.setPosition(letrero.x, letrero.y);
-            letrero.setVisible(true);
-            letreroTexto.setVisible(true);
-            letrero.angle = 0;
-            letreroTexto.angle = 0;
-
-            this.scene.tweens.add({ targets: [letrero, letreroTexto], angle: 360, duration: 800, repeat: -1 });
-
-            this.scene.tweens.add({
-                targets: [letrero, letreroTexto], x: W + 150, duration: 3000, ease: 'Linear',
-                onComplete: () => {
-                    letrero.setVisible(false);
-                    letreroTexto.setVisible(false);
-                    this._iniciarRecovery(700);
-                }
-            });
-
             let ticksDano = 0;
             this.specialCheckEvent = this.scene.time.addEvent({
                 delay: 200, repeat: 14,
@@ -229,8 +207,18 @@ ALTA. Es el "Ultimate" del jefe.
                     if (!estaAgachado) {
                         this.scene.procesarGolpeNemesis({ tipo: 'ESPECIAL', dano: 8 });
                         ticksDano++;
-                        this.scene.tweens.add({ targets: letrero, fillColor: 0xff2200, duration: 80, yoyo: true });
                     }
+                },
+                callbackScope: this,
+                onComplete: () => {
+                    this._iniciarRecovery(700);
+                }
+            });
+
+            // Respaldo adicional para evitar que la animación se quede atascada.
+            this.scene.time.delayedCall(3000, () => {
+                if (this.state === 'ATACANDO') {
+                    this._iniciarRecovery(700);
                 }
             });
         });
@@ -250,34 +238,30 @@ Importancia
 ALTA. Si esto no se ejecuta, el jefe sería invencible.
 ------------------------------------------- */
     _iniciarRecovery(duracionMs) {
-        this.state        = 'RECOVERY';
-        this.invulnerable = false;        
+    this.state        = 'RECOVERY';
+    this.invulnerable = false;
 
-        this.scene.events.emit('nemesis-recovery');
-        this._mostrarAlerta('¡AHORA! Golpéalo', duracionMs - 50);
+    this.scene.events.emit('nemesis-recovery');
+    this._mostrarAlerta('¡AHORA! Golpéalo', duracionMs - 50);
 
-        this.scene.tweens.add({ targets: this, x: this.baseX, y: this.baseY, duration: 200, ease: 'Sine.Out' });
+    this.scene.tweens.add({
+        targets: this,
+        x: this.baseX,
+        y: this.baseY,
+        duration: 200,
+        ease: 'Sine.Out',
+    });
 
-        this.scene.time.delayedCall(duracionMs, () => {
-            this.state = 'IDLE';
-            this.scene.events.emit('nemesis-idle');
-            if (this.scene.alertText) this.scene.alertText.setText('');
-        });
-    }
-
-/* ---------------------------------------------
-¿Qué hace?
-Descuenta HP, lanza el flash de impacto y premia al jugador reseteando el timer del IA si lo golpearon durante el recovery.
-
-¿Qué podemos cambiar osea tamaños, espaciados, etc?
-El tiempo que tarda el destello blanco (`duration: 60`).
-
-¿Qué controla?
-La recepción de castigo de la máquina.
-
-Importancia
-ALTA. Es la función que permite avanzar en el juego al matar al jefe.
-------------------------------------------- */
+    this.scene.time.delayedCall(duracionMs, () => {
+        this.state = 'IDLE';
+        this.scene.events.emit('nemesis-idle');
+        this.scene.events.emit('nemesis-fin-recovery'); // ← nuevo
+        if (this.scene.alertText) this.scene.alertText.setText('');
+    });
+}
+    // ══════════════════════════════════════════════════════════
+    //  RECIBIR DAÑO
+    // ══════════════════════════════════════════════════════════
     recibirDano(cantidad) {
         if (this.invulnerable) {
             this._feedbackInvulnerable();
