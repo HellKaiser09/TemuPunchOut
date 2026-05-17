@@ -163,44 +163,6 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
             this.state = 'ATACANDO';
             this.scene.events.emit('nemesis-atacar', 'ESPECIAL');
 
-            // ── Fase 2: DURANTE — el letrero cruza la pantalla ─
-            // Crea el objeto del letrero
-            const letrero = this.scene.add.rectangle(
-                -100,                              // empieza fuera de pantalla izq
-                this.scene.sys.game.config.height / 2,
-                160, 50,
-                0xffcc00
-            );
-
-            const letreroTexto = this.scene.add.text(
-                letrero.x, letrero.y,
-                '¡COMIDA RÁPIDA!',
-                { fontSize: '13px', color: '#000000', fontFamily: 'monospace' }
-            ).setOrigin(0.5);
-
-            // Gira mientras vuela
-            this.scene.tweens.add({
-                targets: [letrero, letreroTexto],
-                angle: 360,
-                duration: 800,
-                repeat: -1,
-            });
-
-            // Cruza la pantalla — tarda 3 segundos
-            this.scene.tweens.add({
-                targets: [letrero, letreroTexto],
-                x: W + 150,
-                duration: 3000,
-                ease: 'Linear',
-                onComplete: () => {
-                    letrero.destroy();
-                    letreroTexto.destroy();
-
-                    // ── Fase 3: RECOVERY ──────────────────────
-                    this._iniciarRecovery(700);
-                }
-            });
-
             // Verificación continua durante los 3 segundos
             // Cada 200ms revisa si el jugador está agachado
             let ticksDano = 0;
@@ -220,15 +182,18 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
                             dano: 8,               // daño por cada tick sin agacharse
                         });
                         ticksDano++;
-
-                        // Feedback: letrero parpadea rojo cuando conecta
-                        this.scene.tweens.add({
-                            targets: letrero,
-                            fillColor: 0xff2200,
-                            duration: 80,
-                            yoyo: true,
-                        });
                     }
+                },
+                callbackScope: this,
+                onComplete: () => {
+                    this._iniciarRecovery(700);
+                }
+            });
+
+            // Respaldo adicional para evitar que la animación se quede atascada.
+            this.scene.time.delayedCall(3000, () => {
+                if (this.state === 'ATACANDO') {
+                    this._iniciarRecovery(700);
                 }
             });
         });
@@ -238,28 +203,27 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
     //  RECOVERY — ventana donde SÍ se puede golpear
     // ══════════════════════════════════════════════════════════
     _iniciarRecovery(duracionMs) {
-        this.state        = 'RECOVERY';
-        this.invulnerable = false;        // ← ahora sí se puede golpear
+    this.state        = 'RECOVERY';
+    this.invulnerable = false;
 
-        this.scene.events.emit('nemesis-recovery');
-        this._mostrarAlerta('¡AHORA! Golpéalo', duracionMs - 50);
+    this.scene.events.emit('nemesis-recovery');
+    this._mostrarAlerta('¡AHORA! Golpéalo', duracionMs - 50);
 
-        // Vuelve a posición base durante el recovery
-        this.scene.tweens.add({
-            targets: this,
-            x: this.baseX,
-            y: this.baseY,
-            duration: 200,
-            ease: 'Sine.Out',
-        });
+    this.scene.tweens.add({
+        targets: this,
+        x: this.baseX,
+        y: this.baseY,
+        duration: 200,
+        ease: 'Sine.Out',
+    });
 
-        this.scene.time.delayedCall(duracionMs, () => {
-            this.state = 'IDLE';
-            this.scene.events.emit('nemesis-idle');
-            if (this.scene.alertText) this.scene.alertText.setText('');
-        });
-    }
-
+    this.scene.time.delayedCall(duracionMs, () => {
+        this.state = 'IDLE';
+        this.scene.events.emit('nemesis-idle');
+        this.scene.events.emit('nemesis-fin-recovery'); // ← nuevo
+        if (this.scene.alertText) this.scene.alertText.setText('');
+    });
+}
     // ══════════════════════════════════════════════════════════
     //  RECIBIR DAÑO
     // ══════════════════════════════════════════════════════════
