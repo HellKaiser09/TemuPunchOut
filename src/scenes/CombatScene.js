@@ -47,7 +47,6 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
             });
         }
 
-        // FIX: Animación de bloqueo del jugador (ya estaba declarada, ahora también se usa en procesarGolpeNemesis)
         if (!this.anims.exists('bloqueo_derecho')) {
             this.anims.create({
                 key: 'bloqueo_derecho',
@@ -107,6 +106,7 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
                 frameRate: 4, repeat: -1
             });
         }
+
         if (!this.anims.exists('enemigo_bloqueoarriba')) {
             this.anims.create({
                 key: 'enemigo_bloqueoarriba',
@@ -117,7 +117,8 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
                 frameRate: 3, repeat: -1
             });
         }
-         if (!this.anims.exists('enemigo_bloqueoabajo')) {
+
+        if (!this.anims.exists('enemigo_bloqueoabajo')) {
             this.anims.create({
                 key: 'enemigo_bloqueoabajo',
                 frames: [
@@ -179,7 +180,6 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
         this.nemesis.damage = this.nemesis.damage ?? this.nemesis.base.damage;
 
         // ── Sistemas ──────────────────────────────────────────
-        // FIX: Una sola instancia de cada sistema (antes se creaban dos veces, causando audio superpuesto)
         this.buffSystem  = new BuffSystem(this, this.paciente, this.nemesis);
         this.audioSystem = new AudioSystem(this);
         this.audioSystem.playBGM('bgm_pelea');
@@ -192,11 +192,9 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
         const cornerRadius = 18;
         this.hudConfig = { topY, barW, barH, cornerRadius, W };
 
-        // 1. Instanciar motores gráficos para las barras de vida
         this.graphicsHPJugador = this.add.graphics().setDepth(14);
         this.graphicsHPEnemigo = this.add.graphics().setDepth(14);
 
-        // 2. Marco Geométrico de fondo para los Retratos
         const marcoGfx = this.add.graphics().setDepth(13);
         marcoGfx.fillStyle(0x0d0d1a, 1);
         marcoGfx.lineStyle(3, 0xffd700, 1);
@@ -206,7 +204,6 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
         marcoGfx.fillRoundedRect(W - 135, topY - 45, 90, 90, 24);
         marcoGfx.strokeRoundedRect(W - 135, topY - 45, 90, 90, 24);
 
-        // 3. Imágenes de los peleadores
         this.avatarJugador = this.add.image(90, topY, 'perfilpaciente', 0)
             .setScale(1.2)
             .setDepth(15)
@@ -307,7 +304,36 @@ Redibuja los vectores rounded de salud y actualiza la barra de energía del ataq
         );
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Procesa los golpes del jugador contra el némesis. Si el némesis está en animación de bloqueo
+compatible con el tipo de golpe, lo bloquea; de lo contrario aplica daño normal.
+- enemigo_bloqueoarriba bloquea golpes ALTO_IZQ y ALTO_DER.
+- enemigo_bloqueoabajo  bloquea golpes BAJO_IZQ y BAJO_DER.
+------------------------------------------- */
     procesarGolpeJugador(tipo) {
+        // ── Comprobación de bloqueo direccional del némesis ───
+        const animActual = this.enemigo.anims.currentAnim?.key;
+        const esGolpeAlto = tipo === 'ALTO_IZQ' || tipo === 'ALTO_DER';
+        const esGolpeBajo = tipo === 'BAJO_IZQ' || tipo === 'BAJO_DER';
+
+        const bloqueoNemesisDireccional =
+            (animActual === 'enemigo_bloqueoarriba' && esGolpeAlto) ||
+            (animActual === 'enemigo_bloqueoabajo'  && esGolpeBajo);
+
+        if (bloqueoNemesisDireccional) {
+            this.infoText.setText('¡El Némesis bloqueó tu golpe!');
+            this.alertText.setText('¡BLOQUEO!');
+            this.audioSystem?.playGolpePaciente();
+            this.cameras.main.shake(40, 0.005);
+            this.time.delayedCall(800, () => {
+                this.alertText.setText('');
+                if (this.paciente.state === 'NEUTRAL') this.infoText.setText('');
+            });
+            return;
+        }
+
+        // ── Lógica original de bloqueo probabilístico ─────────
         const bloqueandoPorVentana = this.nemesis.state === 'ATACANDO';
         const blockChance = bloqueandoPorVentana ? 0.70 : 0.32;
 
@@ -316,8 +342,6 @@ Redibuja los vectores rounded de salud y actualiza la barra de energía del ataq
             this.alertText.setText('¡BLOQUEO!');
             this.audioSystem?.playGolpePaciente();
 
-            // Animación de bloqueo: secuencia manual de texturas para evitar
-            // conflictos con el sistema de animaciones de Phaser al interrumpir enemigo_idle
             this.enemigo.stop();
             this.enemigo.setTexture('bloqueo2');
             this.time.delayedCall(80, () => {
@@ -409,7 +433,6 @@ Ejecuta la animación y reducción masiva de salud por el Súper Golpe de Espaci
 /* ---------------------------------------------
 ¿Qué hace?
 Procesa los golpes entrantes de la hamburguesa, validando esquives perfectos o mitigaciones por guardia.
-FIX: Ahora reproduce la animación 'bloqueo_derecho' en el sprite del jugador al bloquear.
 ------------------------------------------- */
     procesarGolpeNemesis(data = {}) {
         if (this.paciente.hp <= 0) return;
