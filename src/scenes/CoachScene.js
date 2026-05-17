@@ -24,7 +24,7 @@ export default class CoachScene extends Phaser.Scene {
         // Cortina oscura sutil para que el texto de la izquierda sea ultra legible
         this.add.rectangle(0, 0, W, H, 0x000000, 0.35).setOrigin(0);
 
-        this.add.image(W * 0.57, H * 0.50, 'coach_eleccion').setOrigin(0.4).setScale(1.22);
+        this.add.image(W * 0.53, H * 0.50, 'coach_eleccion').setOrigin(0.4).setScale(1.22);
 
 
         // Contenedor principal para la lista de respuestas interactivas

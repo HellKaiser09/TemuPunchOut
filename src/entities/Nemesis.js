@@ -1,6 +1,6 @@
 export class Nemesis extends Phaser.GameObjects.Rectangle {
     constructor(scene, x, y) {
-        super(scene, x, y, 200, 250, 0x882222);
+        super(scene, x, y, 300, 150, 0x882222);
         scene.add.existing(this);
 
         this.scene    = scene;

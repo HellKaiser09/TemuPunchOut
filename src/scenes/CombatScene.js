@@ -1,6 +1,6 @@
 import { Paciente } from '../entities/Paciente.js';
 import { Nemesis } from '../entities/Nemesis.js';
-import { BuffSystem, BUFF_CATALOG } from '../systems/BuffSystem.js';
+import { BuffSystem } from '../systems/BuffSystem.js';
 
 /**
  * Escena principal del bucle de combate.
@@ -14,34 +14,66 @@ export class CombatScene extends Phaser.Scene {
 
     // ── MIGRACIÓN Y PERSISTENCIA DE DATOS ENTRE ROUNDS ──
     init(data) {
-        // Control del asalto actual (Por defecto Round 1)
         this.currentRound   = data?.currentRound ?? 1;
-        
-        // Flag que rastrea si el Némesis ya resucitó en el clímax dramático
         this.nemesisRevived  = data?.nemesisRevived ?? false;
-        
-        // Conservación del estado de salud del prota entre transiciones
         this.savedPatientHp  = data?.savedPatientHp ?? 150;
-
-        // Buff seleccionado en la escena del Coach pendiente por procesar
         this.pendingBuff     = data?.pendingBuff ?? null; 
     }
 
     // ── INICIALIZACIÓN DE ASSETS Y ELEMENTOS DEL RING ──
     create() {
+        // 📐 SOLUCIÓN: Declaramos el tamaño de pantalla de forma segura para usar W y H
         const W = this.scale.width;
         const H = this.scale.height;
-        this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H)
+
+        // 🖼️ EL FONDO VA PRIMERO para que ningún personaje quede oculto detrás
+        this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H);
+        
         // Transición cinematográfica de entrada suave
         this.cameras.main.fadeIn(500, 0, 0, 0);
-        
-        const width = this.sys.game.config.width;
-        const height = this.sys.game.config.height;
 
-        // Instanciación de entidades modulares (Inyección de dependencias)
-        this.nemesis = new Nemesis(this, width / 2, height / 2 - 50);
-        this.paciente = new Paciente(this, width / 2, height - 120);
-        this.paciente.hp = this.savedPatientHp; // Restauramos la vida acumulada
+        // 🎬 1. REGISTRAR LA ANIMACIÓN DEL ENEMIGO (Usando tu asset del BootScene)
+        this.anims.create({
+            key: 'enemigo_batazo_izq',
+            frames: this.anims.generateFrameNumbers('hamburguesa_golpe_izq', { start: 0, end: 2 }),
+            frameRate: 12, // Velocidad arcade para el batazo
+            repeat: 0      // Se ejecuta una sola vez por golpe
+        });
+
+        // Instanciación de entidades lógicas de tu compañero
+        this.nemesis = new Nemesis(this, W / 2, H / 2 - 50);
+        this.paciente = new Paciente(this, W / 2, H - 120);
+        this.paciente.hp = this.savedPatientHp; 
+
+        // 🙈 OCULTAR RECTÁNGULO DE PRUEBA: Apagamos el cuadro de color plano de la entidad Némesis
+        // para que solo se vea tu personaje premium de la hamburguesa.
+        this.nemesis.setVisible(false);
+
+        // 🍔 2. INYECTAR EL SPRITE DE LA HAMBURGUESA ANIMADA
+        this.enemigo = this.add.sprite(this.nemesis.x, this.nemesis.y + 60, 'hamburguesa_golpe_izq', 0);
+        this.enemigo.setScale(0.70);
+        this.enemigo.setDepth(10); // 🔥 FORZAR AL FRENTE: Evita que el fondo o la UI lo tapen
+
+        // Retorno automático a la guardia al terminar el batazo
+        this.enemigo.on('animationcomplete', (anim) => {
+            if (anim.key === 'enemigo_batazo_izq') {
+                this.enemigo.setFrame(0); 
+            }
+        });
+
+        
+        // Cuando el script de Nemesis.js grite 'nemesis-atacar', tu sprite reacciona al instante
+        this.events.on('nemesis-atacar', (direccion) => {
+            if (direccion === 'IZQUIERDA') {
+                this.enemigo.play('enemigo_batazo_izq', true);
+            }
+            // NOTA: Si luego hacen la tira de la derecha, solo agregas:
+            // if (direccion === 'DERECHA') this.enemigo.play('enemigo_batazo_der', true);
+        });
+
+        // Base explícita para que los debuffs de daño del enemigo sí afecten ataques reales.
+        this.nemesis.base = { ...(this.nemesis.base ?? {}), damage: 10 };
+        this.nemesis.damage = this.nemesis.damage ?? this.nemesis.base.damage;
 
         // Inicialización del ecosistema de modificadores lógicos (BuffSystem)
         this.buffSystem = new BuffSystem(this, this.paciente, this.nemesis);
@@ -50,7 +82,6 @@ export class CombatScene extends Phaser.Scene {
         this.events.off('coach-buff-chosen'); 
         this.events.on('coach-buff-chosen', (buffId) => {
             this.currentRound++;
-            // Viaje de datos hacia el siguiente asalto de forma limpia
             this.scene.restart({
                 currentRound: this.currentRound,
                 savedPatientHp: this.paciente.hp,
@@ -60,79 +91,73 @@ export class CombatScene extends Phaser.Scene {
         });
 
         // ── MAQUETACIÓN DE LA INTERFAZ DE USUARIO (UI) ──
-        // Sección de salud del Paciente
         this.add.text(50, 30, `Paciente (Round ${this.currentRound}): `, { font: "16px Arial", fill: "#fff" });
         this.pacienteHPbar = this.add.rectangle(50, 55, 250, 20, 0x00ff00).setOrigin(0, 0.5);
         this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
 
-        // Barra medidora del Súper Ataque
         this.add.text(50, 85, "SÚPER:", { font: "12px monospace", fill: "#00ffff" });
         this.superBar = this.add.rectangle(100, 92, 0, 10, 0x00ffff).setOrigin(0, 0.5);
         this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
 
-        // Sección de salud del Némesis
-        this.add.text(width - 300, 30, this.nemesisRevived ? 'NÉMESIS (💥 IRA CONSCIENTE)' : 'Némesis', { font: '16px Arial', fill: '#fff' });
-        this.nemesisHPBar = this.add.rectangle(width - 300, 55, 250, 20, 0xff0000).setOrigin(0, 0.5);
+        this.add.text(W - 300, 30, this.nemesisRevived ? 'NÉMESIS (💥 IRA CONSCIENTE)' : 'Némesis', { font: '16px Arial', fill: '#fff' });
+        this.nemesisHPBar = this.add.rectangle(W - 300, 55, 250, 20, 0xff0000).setOrigin(0, 0.5);
 
-        // BALANCEO CLÍMAX: Modificadores de peligro si la sombra se reincorpora en el Round 3
         if (this.nemesisRevived) {
             this.nemesis.hp = 60; 
-            this.nemesis.attackTimer.delay = 2500; // Incremento drástico de velocidad
+            this.nemesis.attackTimer.delay = 2500; 
         }
 
-        // Canales independientes de textos para alertas y mecánicas
-        this.infoText = this.add.text(width / 2, 20, 'Estado: NEUTRAL', { font: '18px monospace', fill: '#ffff00' }).setOrigin(0.5);
-        this.countdownText = this.add.text(width / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
-        this.alertText = this.add.text(width / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
+        this.infoText = this.add.text(W / 2, 20, 'Estado: NEUTRAL', { font: '18px monospace', fill: '#ffff00' }).setOrigin(0.5);
+        this.countdownText = this.add.text(W / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
+        this.alertText = this.add.text(W / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
 
         // ── CONTENEDOR DIAGNÓSTICO DE BUFFS Y DEBUFFS ACTIVOS ──
-        this.add.rectangle(width / 2, height - 95, 920, 100, 0x0b1526, 0.82).setStrokeStyle(2, 0x4f8bd8);
-        this.effectsTitle = this.add.text(width / 2 - 445, height - 135, 'ESTADO DE COMBATE', {
+        this.add.rectangle(W / 2, H - 95, 920, 100, 0x0b1526, 0.82).setStrokeStyle(2, 0x4f8bd8);
+        this.effectsTitle = this.add.text(W / 2 - 445, H - 135, 'ESTADO DE COMBATE', {
             font: '14px monospace', fill: '#7ed7ff', fontStyle: 'bold'
         }).setOrigin(0, 0.5);
         
-        this.buffLineText = this.add.text(width / 2 - 445, height - 112, 'BUFFS: ninguno', {
+        this.buffLineText = this.add.text(W / 2 - 445, H - 112, 'BUFFS: ninguno', {
             font: '13px monospace', fill: '#6dff9d', wordWrap: { width: 900 }
         }).setOrigin(0, 0);
         
-        this.debuffLineText = this.add.text(width / 2 - 445, height - 90, 'DEBUFFS: ninguno', {
+        this.debuffLineText = this.add.text(W / 2 - 445, H - 90, 'DEBUFFS: ninguno', {
             font: '13px monospace', fill: '#ff8f8f', wordWrap: { width: 900 }
         }).setOrigin(0, 0);
         
-        this.statsLineText = this.add.text(width / 2 - 445, height - 68, 'STATS: --', {
+        this.statsLineText = this.add.text(W / 2 - 445, H - 68, 'STATS: --', {
             font: '13px monospace', fill: '#e5e7eb', wordWrap: { width: 900 }
         }).setOrigin(0, 0);
 
-        this.buffInfoText = this.add.text(width / 2 - 445, height - 48, '', {
-            font: '12px monospace', fill: '#a8ffc4', wordWrap: { width: 900 }
-        }).setOrigin(0, 0);
+        // FLUJO DE INTERCEPCIÓN DE BUFFS
+        const registryPendingBuff = this.registry.get('pendingBuff');
+        if (!this.pendingBuff && registryPendingBuff) {
+            this.pendingBuff = registryPendingBuff;
+        }
 
-        this.debuffInfoText = this.add.text(width / 2 - 445, height - 30, '', {
-            font: '12px monospace', fill: '#ffbbba', wordWrap: { width: 900 }
-        }).setOrigin(0, 0);
-
-        // FLUJO DE INTERCEPCIÓN: Aplicar el modificador lógicamente en el nuevo ciclo de vida
         if (this.pendingBuff) {
             console.log(`[SISTEMA] Activando efectos de: ${this.pendingBuff} para el Round ${this.currentRound}`);
             this.buffSystem.apply(this.pendingBuff);
-            this.pendingBuff = null; // Vaciamos el búfer
+            this.registry.remove('pendingBuff');
+            this.pendingBuff = null; 
         }
 
         this._refreshCombatUI();
     }
 
-    // ── BUCLE PRINCIPAL DE ACTUALIZACIÓN VISUAL Y CONTROL ──
     update() {
-        // Delegación de inputs del teclado al objeto del protagonista
         this.paciente.update();
+
+        // 🔥 IMÁN DE POSITION: La hamburguesa copia la X y la Y lógica de Jesús en cada frame
+        if (this.enemigo && this.nemesis) {
+            this.enemigo.x = this.nemesis.x;
+            this.enemigo.y = this.nemesis.y + 60; // Mantiene el ajuste de piso del ring
+        }
+
         // Sincronización de las líneas de estados del panel de control inferior
         this._refreshCombatUI();
     }
-
-    /**
-     * Calcula la acumulación de energía adicional ganada por golpes asestados (Efecto Courage)
-     * @returns {number} Porcentaje acumulado de recarga de Súper
-     */
+    
     _getOnHitBonus() {
         const onHitEffects = this.registry.get('onHitBuff') ?? [];
         return onHitEffects
@@ -140,70 +165,54 @@ export class CombatScene extends Phaser.Scene {
             .reduce((acc, effect) => acc + effect.value, 0);
     }
 
-    /**
-     * Transforma la matriz lógica interna de BuffSystem en etiquetas legibles en pantalla.
-     */
     _refreshCombatUI() {
         if (!this.buffLineText || !this.debuffLineText || !this.statsLineText || !this.buffSystem || !this.paciente || !this.nemesis) return;
 
         const active = this.buffSystem.getActiveBuffs();
-        const buffMods = active.filter(mod => mod.sourceTag !== 'debuff');
-        const debuffMods = active.filter(mod => mod.sourceTag === 'debuff' || mod.targetKey === 'enemy');
-
-        const uniqueSources = (mods) => {
-            const seen = new Set();
-            return mods.reduce((list, mod) => {
-                const id = mod.sourceId || mod.sourceTag || mod.type;
-                if (!seen.has(id)) {
-                    seen.add(id);
-                    list.push(id);
-                }
-                return list;
-            }, []);
+        const toLabel = (mod) => {
+            const side = mod.targetKey === 'enemy' ? 'NEMESIS' : 'PACIENTE';
+            const rounds = typeof mod.rounds === 'number' ? `${mod.rounds}r` : 'inst';
+            if (mod.type === 'immunity') return `${side}:inmune(${mod.value}, ${rounds})`;
+            if (mod.type === 'block') return `${side}:bloquea(${mod.value}, ${rounds})`;
+            if (mod.type === 'on_hit') return `${side}:on_hit(${rounds})`;
+            const stat = mod.effect?.stat ?? 'stat';
+            return `${side}:${stat}(${rounds})`;
         };
 
-        const buffIds = uniqueSources(buffMods);
-        const debuffIds = uniqueSources(debuffMods);
-        const getName = (id) => BUFF_CATALOG[id]?.name ?? id;
-
-        const buffLine = buffIds.length ? buffIds.map(getName).join(' | ') : 'ninguno';
-        const debuffLine = debuffIds.length ? debuffIds.map(getName).join(' | ') : 'ninguno';
+        const buffMods = active.filter(mod => mod.sourceTag !== 'debuff');
+        const debuffMods = active.filter(mod => mod.sourceTag === 'debuff' || mod.targetKey === 'enemy');
+        
+        const buffLine = buffMods.length ? buffMods.map(toLabel).join(' | ') : 'ninguno';
+        const debuffLine = debuffMods.length ? debuffMods.map(toLabel).join(' | ') : 'ninguno';
 
         this.buffLineText.setText(`BUFFS: ${buffLine}`);
         this.debuffLineText.setText(`DEBUFFS: ${debuffLine}`);
         this.statsLineText.setText(
-            `STATS: Daño Némesis ${this.nemesis.damage} | Crit Paciente ${this.paciente.critDamage}% | Bonus energía por golpe +${this._getOnHitBonus()}%`
+            `STATS: Daño Némesis ${this.nemesis.damage} | Crit Paciente ${this.paciente.critDamage}% | Bonus energía por golpe +${this._getOnHitBonus()}% | Bloqueo manipulación ${this.buffSystem.isAbilityBlocked('manipulacion') ? 'SI' : 'NO'}`
         );
-
-        const buffDescriptions = buffIds.map(id => BUFF_CATALOG[id]?.desc).filter(Boolean);
-        const debuffDescriptions = debuffIds.map(id => BUFF_CATALOG[id]?.desc).filter(Boolean);
-        this.buffInfoText.setText(buffDescriptions.length ? `INFO BUFFS: ${buffDescriptions.join(' • ')}` : '');
-        this.debuffInfoText.setText(debuffDescriptions.length ? `INFO DEBUFFS: ${debuffDescriptions.join(' • ')}` : '');
     }
 
     // ── SISTEMA DE EVENTOS OFENSIVOS DEL PROTAGONISTA ──
     procesarGolpeJugador(tipo) {
-        // Ventana de Reacción: Si la IA está atacando es más probable que bloquee tu contraataque
         const bloqueandoPorVentana = this.nemesis.state === 'ATACANDO';
         const blockChance = bloqueandoPorVentana ? 0.70 : 0.32;
 
         if (Math.random() < blockChance) {
-            // Caso A: El golpe impacta en la guardia del enemigo
+            // Caso A: El golpe impacta en la guardia de la hamburguesa
             this.infoText.setText('¡Bloqueado por el Némesis!');
             this.alertText.setText('¡BLOQUEO!');
-            this.nemesis.setFillStyle(0x555555); // Feedback visual gris metálico
             
-            console.log(`[DIFFICULTY] Bloqueo enemigo (${Math.round(blockChance * 100)}%) durante ${bloqueandoPorVentana ? 'ventana de ataque' : 'neutral'}`);
+            // 🔥 MODIFICADO: Aplicamos el tinte gris de bloqueo directamente sobre tu nuevo Sprite
+            this.enemigo.setTint(0x555555); 
             
             this.time.delayedCall(150, () => {
-                if (this.nemesis.hp > 0 && this.nemesis.state !== 'ATACANDO') this.nemesis.setFillStyle(0x882222);
+                this.enemigo.clearTint(); // Limpiamos el color gris
                 this.alertText.setText('');
             });
         } else {
             // Caso B: El golpe conecta directo en el cuerpo del enemigo
-            let damageCalculado = (tipo.includes('BAJO')) ? 8 : 12; // Daño diferencial alto/bajo
+            let damageCalculado = (tipo.includes('BAJO')) ? 8 : 12; 
             
-            // MECÁNICA RPG: Inyección del modificador de la carta 'Vulnerabilidad' (Críticos)
             let esCritico = false;
             if (this.paciente.critDamage > 0 && Math.random() < 0.35) { 
                 const extraDamage = Math.round(damageCalculado * (this.paciente.critDamage / 100));
@@ -211,20 +220,16 @@ export class CombatScene extends Phaser.Scene {
                 esCritico = true;
             }
 
-            console.log(`[BUFF CHECK] ¿Paciente tiene Multiplicador Crítico?: ${this.paciente.critDamage}%`);
-            console.log(`[DAMAGE CHECK] Daño real aplicado al Némesis: ${damageCalculado}`);
-
             this.nemesis.hp -= damageCalculado;
             
             if (esCritico) {
-                this.infoText.setText(`¡CRÍTICO! Golpe ${tipo} (-${damageCalculado} HP)`);
-                this.alertText.setText(' CRÍTICO ');
+                this.infoText.setText(`💥 ¡CRÍTICO! Golpe ${tipo} (-${damageCalculado} HP)`);
+                this.alertText.setText('💥 CRÍTICO 💥');
                 this.time.delayedCall(600, () => this.alertText.setText(''));
             } else {
                 this.infoText.setText(`¡Golpe ${tipo}! (-${damageCalculado} HP)`);
             }
             
-            // MECÁNICA RPG: Bono acumulado por efectos On Hit (Valentía)
             let bonoEnergiaExtra = 0;
             const onHitEffects = this.registry.get('onHitBuff') ?? [];
             onHitEffects.forEach(effect => {
@@ -233,18 +238,22 @@ export class CombatScene extends Phaser.Scene {
                 }
             });
 
-            // Actualización del medidor de energía cinemática (Súper)
             this.paciente.superMeter = Math.min(100, this.paciente.superMeter + 10 + bonoEnergiaExtra);
             this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
 
             this.nemesisHPBar.setSize((Math.max(0, this.nemesis.hp) / 100) * 250, 20);
-            this.cameras.main.shake(80, 0.01); // "Juice" visual de impacto ligero
-            this.nemesis.setFillStyle(0xffffff); // Destello momentáneo blanco
+            this.cameras.main.shake(80, 0.01); 
             
+            // 🔥 MODIFICADO: Destello momentáneo blanco en tu hamburguesa
+            this.enemigo.setTint(0xffffff); 
+            
+            // 🔥 MODIFICADO: El Tween de impacto deforma ligeramente a la hamburguesa (Juice visual)
             this.tweens.add({
-                targets: this.nemesis,
-                scaleX: 1.1, duration: 50, yoyo: true,
-                onComplete: () => { if (this.nemesis.hp > 0 && this.nemesis.state !== 'ATACANDO') this.nemesis.setFillStyle(0x882222); }
+                targets: this.enemigo,
+                scaleX: 1.6, 
+                duration: 50, 
+                yoyo: true,
+                onComplete: () => { this.enemigo.clearTint(); }
             });
 
             if (this.nemesis.hp <= 0) this.terminarCombate(true);
@@ -253,11 +262,12 @@ export class CombatScene extends Phaser.Scene {
 
     // ── CONTROL DEL SÚPER ATAQUE CINEMÁTICO ──
     procesarSuperJugador() {
-        this.nemesis.setFillStyle(0x00ffff);
-        this.cameras.main.flash(300, 0, 255, 255); // Destello cyan destructivo
-        this.cameras.main.shake(500, 0.03); // Sacudida masiva de pantalla
+        // 🔥 MODIFICADO: Tinte cyan directamente a tu personaje animado
+        this.enemigo.setTint(0x00ffff);
+        this.cameras.main.flash(300, 0, 255, 255); 
+        this.cameras.main.shake(500, 0.03); 
 
-        this.nemesis.hp -= 50; // Daño bruto crítico masivo
+        this.nemesis.hp -= 50; 
         this.nemesisHPBar.setSize((Math.max(0, this.nemesis.hp) / 100) * 250, 20);
 
         this.tweens.add({
@@ -270,8 +280,8 @@ export class CombatScene extends Phaser.Scene {
                 if (this.nemesis.hp <= 0) {
                     this.terminarCombate(true);
                 } else {
-                    this.nemesis.setFillStyle(0x882222);
-                    this.paciente.state = 'NEUTRAL'; // Desbloqueo del State Lock anti-congelamiento
+                    this.enemigo.clearTint(); // Limpiar rastro de color cyan
+                    this.paciente.state = 'NEUTRAL'; 
                     this.infoText.setText('Estado: NEUTRAL');
                 }
             }
@@ -282,11 +292,9 @@ export class CombatScene extends Phaser.Scene {
     procesarGolpeNemesis(data = {}) {
         if (this.paciente.hp <= 0) return;
 
-        // Desglose de parámetros enviados por la IA del enemigo
-        const { tipo = 'LATERAL', direccion = 'NINGUNA' } = data;
-        let dano = data.dano ?? this.nemesis.damage ?? 10;
+        const dañoBaseNemesis = this.nemesis.damage ?? 10;
+        const { tipo = 'LATERAL', direccion = 'NINGUNA', dano = dañoBaseNemesis } = data;
 
-        // 🛡️ SUB-PROCESO ESPECIAL: Manejo de amenazas continuas/Obstáculos (Letreros)
         if (tipo === 'ESPECIAL') {
             this.paciente.hp = Math.max(0, this.paciente.hp - dano);
             this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
@@ -296,12 +304,10 @@ export class CombatScene extends Phaser.Scene {
             return;
         }
 
-        // Variables de decisión de la ventana de esquive (Fórmula original Punch-Out)
         let evadido   = false;
         let bloqueado = false;
         let razon     = '';
 
-        // 1. CONDICIONALES DE ATAQUES LATERALES (Mezcla Izquierda / Derecha)
         if (tipo === 'LATERAL') {
             if (direccion === 'IZQUIERDA' && this.paciente.lastDodgeDirection === 'DERECHA') {
                 evadido = true;
@@ -311,12 +317,8 @@ export class CombatScene extends Phaser.Scene {
                 evadido = true;
                 razon   = '¡Esquive perfecto! (DER → moviste IZQ)';
             }
-            if (!evadido && this.paciente.state === 'AGACHADO') {
-                evadido = false; // Agacharse no te salva de ganchos laterales directos
-            }
         }
 
-        // 2. CONDICIONALES DE ATAQUES VERTICALES (Pases por arriba)
         if (tipo === 'ARRIBA' || tipo === 'ESPECIAL') {
             if (this.paciente.state === 'AGACHADO' || this.paciente.isDucking) {
                 evadido = true;
@@ -324,31 +326,23 @@ export class CombatScene extends Phaser.Scene {
             }
         }
 
-        // 3. CONDICIONAL DE DETECCIÓN DE GUARDIA ACTIVA
         if (!evadido && this.paciente.state === 'BLOQUEANDO') {
             bloqueado = true;
         }
         
-        // ── RESOLUCIÓN DE MATRIZ DE DAÑO Y MITIGACIONES ──
         if (evadido) {
-            // Caso I: Esquive limpio exitoso
             this.infoText.setText(`✓ ${razon}`);
-
         } else if (bloqueado) {
-            // Caso II: Chip Damage (Daño por absorción balanceado)
             const chipDamage = 2;
             this.paciente.hp = Math.max(0, this.paciente.hp - chipDamage);
             this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
             this.infoText.setText(`Guardia firme (-${chipDamage} HP)`);
             this.cameras.main.shake(50, 0.005);
-
         } else {
-            // Caso III: El golpe conecta directo (Castigo por error)
             let dañoFinal = dano;
             
-            // DESVENTAJA DE ROL: Si tienes Vulnerabilidad activa, sufres castigo amplificado
             if (this.paciente.critDamage > 0) {
-                dañoFinal = Math.round(dañoFinal * 1.25); // +25% de dolor por heridas expuestas
+                dañoFinal = Math.round(dañoFinal * 1.25); 
                 this.infoText.setText(`✗ ¡Impacto amplificado por Vulnerabilidad! (-${dañoFinal} HP)`);
             } else {
                 this.infoText.setText(`✗ ¡Golpe directo! (-${dañoFinal} HP)`);
@@ -357,14 +351,11 @@ export class CombatScene extends Phaser.Scene {
             this.paciente.hp = Math.max(0, this.paciente.hp - dañoFinal);
             this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
             
-            // "Juice" visual violento por impacto directo recibido
             this.cameras.main.shake(250, 0.025);
-            this.cameras.main.flash(100, 255, 0, 0); // Destello de dolor rojo sangre
+            this.cameras.main.flash(100, 255, 0, 0); 
         }
 
-        // ── REINICIO DE LOS FRAMES DE RECUPERACIÓN (300ms) ──
         this.time.delayedCall(300, () => {
-            this.nemesis.setFillStyle(0x882222); // Restablecer color base carmesí
             this.paciente.lastDodgeDirection = 'NINGUNA';
             this.alertText.setText('');
 
@@ -372,20 +363,16 @@ export class CombatScene extends Phaser.Scene {
                 this.infoText.setText('Estado: NEUTRAL');
             }
 
-            // Comprobación fulminante de Game Over
             if (this.paciente.hp <= 0) {
-                console.log('[DERROTA] El paciente ha caído.');
                 this.terminarCombate(false);
             }
         });
     }
 
-    // ── REGLAS DE ENRUTAMIENTO CINEMÁTICO Y NARRATIVO DEL RÉFERI ──
     terminarCombate(victoria) {
-        this.nemesis.attackTimer.destroy(); // Detenemos disparos de la IA
+        this.nemesis.attackTimer.destroy(); 
 
         if (!victoria) {
-            // Flujo A: Derrota absoluta -> Fundido a negro hacia la pantalla de KO
             this.cameras.main.fade(800, 0, 0, 0);
             this.cameras.main.once('camerafadeoutcomplete', () => {
                 this.scene.start('EndScene', { victoria: false });
@@ -393,12 +380,10 @@ export class CombatScene extends Phaser.Scene {
             return;
         }
 
-        // Flujo B: Victoria parcial -> Lanzamiento estratégico del Coach (Rounds 1 y 2)
         if (this.currentRound === 1 || this.currentRound === 2) {
             this.paciente.state = 'CINEMATIC'; 
-            this.buffSystem.tickRound(); // Consumir tiempo de duración de ventajas lógicas
+            this.buffSystem.tickRound(); 
 
-            // Lanzamos overlay del Coach de forma superpuesta sin pausar el fondo
             this.scene.launch('CoachScene', {
                 round: this.currentRound,
                 playerHp: this.paciente.hp,
@@ -407,11 +392,9 @@ export class CombatScene extends Phaser.Scene {
             });
 
         } else if (this.currentRound === 3) {
-            // Flujo C: El clímax narrativo del tercer asalto (El "Falso Final")
             if (!this.nemesisRevived) {
                 this.paciente.state = 'CINEMATIC';
 
-                // Líneas guionadas de la transformación/resurrección
                 const lineasResurreccion = [
                     { speaker: 'patient', text: '¡Se acabó!, pensaba que me que me iba tomar de 6 a 7 rounds.' },
                     { speaker: 'dr', text: '¿Eso crees? El servicio al cliente te está llamando.' },
@@ -427,13 +410,12 @@ export class CombatScene extends Phaser.Scene {
                         nextScene: 'CombatScene',
                         nextData: {
                             currentRound: 3,
-                            nemesisRevived: true, // Forzamos flag de resurrección para el reenganche
+                            nemesisRevived: true, 
                             savedPatientHp: this.paciente.hp
                         }
                     });
                 });
             } else {
-                // Flujo D: Segundo noqueo del Round 3 -> Redención y Victoria Final del juego
                 this.paciente.state = 'CINEMATIC';
                 
                 const lineasVictoriaFinal = [
