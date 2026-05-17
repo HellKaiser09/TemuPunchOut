@@ -40,17 +40,16 @@ export class DialogueScene extends Phaser.Scene {
 
     // data = { lines: [...], nextScene: 'CombatScene', nextData: {} }
     init(data) {
-        this.lines     = data.lines     || [];
-        this.nextScene = data.nextScene || 'CombatScene';
-        this.nextData  = data.nextData  || {};
-        this.typing    = false;
-        this.fullText  = '';
-        this.pages     = [];
-        this.pageIndex = 0;
-        this.charIndex = 0;
-        this.typTimer  = null;
-        this.bodyHeight = 0;
-    }
+    this.lines         = data.lines          || [];
+    this.nextScene     = data.nextScene      || 'CombatScene';
+    this.nextData      = data.nextData       || {};
+    this.onFinishEvent = data.onFinishEvent  || null;
+    this.typing        = false;
+    this.fullText      = '';
+    this.charIndex     = 0;
+    this.typTimer      = null;
+}
+
 
     create() {
         const W = this.scale.width;
@@ -73,27 +72,27 @@ export class DialogueScene extends Phaser.Scene {
 
         // ── Textos ───────────────────────────────────────────────────────────
         this.speakerText = this.add.text(110, boxY - 58, '', {
-            fontSize: '20px', fontFamily: 'monospace',
+            fontSize: '40px', fontFamily: 'monospace',
             color: '#ffd700', fontStyle: 'bold',
         });
 
         const bodyWidth = W - 180;
         this.bodyHeight = boxH - 70;
         this.bodyText = this.add.text(110, boxY - 38, '', {
-            fontSize: '24px', fontFamily: 'sans-serif',
+            fontSize: '44px', fontFamily: 'sans-serif',
             color: '#f0ede6', wordWrap: { width: bodyWidth },
             lineSpacing: 6,
         });
 
         this.measureText = this.add.text(0, 0, '', {
-            fontSize: '24px', fontFamily: 'sans-serif',
+            fontSize: '44px', fontFamily: 'sans-serif',
             wordWrap: { width: bodyWidth },
             lineSpacing: 6,
         }).setVisible(false);
 
         // ── Indicador de avance ──────────────────────────────────────────────
         this.prompt = this.add.text(W - 30, boxY + boxH/2 - 10, '▶', {
-            fontSize: '20px', color: '#ffd700', fontFamily: 'monospace',
+            fontSize: '40px', color: '#ffd700', fontFamily: 'monospace',
         }).setOrigin(1, 1);
 
         this.tweens.add({
@@ -223,12 +222,17 @@ export class DialogueScene extends Phaser.Scene {
     }
 
     _finish() {
-        this.tweens.add({
-            targets: this.cameras.main, alpha: 0, duration: 300,
-            onComplete: () => {
-                this.scene.stop('DialogueScene');
-                this.scene.start(this.nextScene, this.nextData);
-            },
-        });
-    }
+    this.tweens.add({
+        targets: this.cameras.main, alpha: 0, duration: 300,
+        onComplete: () => {
+            // Emite el evento a CombatScene si se configuró uno
+            if (this.onFinishEvent) {
+                const combatScene = this.scene.get('CombatScene');
+                if (combatScene) combatScene.events.emit(this.onFinishEvent);
+            }
+            this.scene.stop('DialogueScene');
+        },
+    });
+}
+
 }

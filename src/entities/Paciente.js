@@ -20,6 +20,7 @@ export class Paciente extends Phaser.GameObjects.Rectangle {
         this.maxConsecutive = 3;
         this.fatigueCooldownMs = 800;
         this.lastPunchTime = 0;
+        this.lastPunchType = null; // 🥊 Rastrear tipo de golpe para sprite visual
 
         // ── Duck mantenido ────────────────────────────────────
         this.isDucking = false;
@@ -125,6 +126,7 @@ export class Paciente extends Phaser.GameObjects.Rectangle {
 
         this.punchCooldown = true;
         this.state = 'ATACANDO';
+        this.lastPunchType = tipo; // 🥊 Guardar tipo de golpe para el sprite visual
 
         this.scene.procesarGolpeJugador(tipo);
 

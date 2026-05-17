@@ -35,6 +35,8 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
         const elegido  = Phaser.Utils.Array.GetRandom(opciones);
         this.ultimoAtaque = elegido;
 
+        console.log(`[Nemesis] elegirAtaque -> opciones: ${JSON.stringify(opciones)}, elegido: ${elegido}`);
+
         switch (elegido) {
             case 'IZQUIERDA': this.atacarLateral('IZQUIERDA'); break;
             case 'DERECHA':   this.atacarLateral('DERECHA');   break;
@@ -53,6 +55,8 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
 
         const offsetX = direccion === 'IZQUIERDA' ? -90 : 90;
 
+        console.log(`[Nemesis] atacarLateral -> direccion: ${direccion}, offsetX: ${offsetX}`);
+
         // ── Fase 1: PREPARAR (animación ya existente) ─────────
         this.scene.events.emit('nemesis-preparar', direccion);
         this._mostrarAlerta(`⚠ Golpe ${direccion}`, 1400);
@@ -68,6 +72,7 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
         // ── Fase 2: DURANTE — el golpe sale ───────────────────
         this.scene.time.delayedCall(1500, () => {
             this.state = 'ATACANDO';
+            console.log(`[Nemesis] emitir evento 'nemesis-atacar' -> ${direccion}`);
             this.scene.events.emit('nemesis-atacar', direccion);
 
             this.scene.tweens.add({

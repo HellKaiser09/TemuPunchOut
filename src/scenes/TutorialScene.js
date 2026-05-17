@@ -1,6 +1,3 @@
-// src/scenes/TutorialScene.js
-// Pantalla de tutorial en dos columnas con el estilo minimalista de los créditos
-
 export class TutorialScene extends Phaser.Scene {
     constructor() {
         super({ key: 'TutorialScene' });
@@ -10,140 +7,110 @@ export class TutorialScene extends Phaser.Scene {
         const W = this.scale.width;
         const H = this.scale.height;
 
-        // 1. Fondo oscuro de aislamiento (Idéntico al menú y créditos)
-        if (this.textures.exists('bg_menu_tutorial')) {
-        // Añadimos la imagen centrada y la escalamos para que cubra todo el lienzo
-        const fondo = this.add.image(W / 2, H / 2, 'bg_menu_tutorial');
-        fondo.setDisplaySize(W, H);
-        fondo.setAlpha(0.9); 
+        // Fondo del ring (mismo que el combate)
+        this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H);
 
-    } else {
-        // Respaldo elegante: Si por alguna razón no se cargó la imagen, usamos un color sólido
-        this.add.rectangle(W / 2, H / 2, W, H, 0x0d0d1a);
-    }
+        this.cameras.main.fadeIn(400);
 
-        // Contenedor para la animación de entrada de todo el bloque
-        const contenedor = this.add.container(0, 0);
+        const tutorialLines = [
+            { speaker: 'system', text: 'Estás dentro de tu propio miedo.' },
+            { speaker: 'system', text: 'No te preocupes. Es solo un sueño.' },
+            { speaker: 'system', text: '(Más o menos.)' },
+            { speaker: 'system', text: '[Q] Golpe bajo izq.   [W] Golpe alto izq.\n[E] Golpe bajo der.   [R] Golpe alto der.' },
+            { speaker: 'system', text: '[←] [→] Esquivar a los lados\n[↓]  Agacharse (mantén presionado)' },
+            { speaker: 'system', text: 'Tu oponente representa algo que te ha estado quitando el sueño.' },
+            { speaker: 'system', text: 'Aunque literalmente tiene forma de combo #3.' },
+        ];
 
-        // 2. Título principal centrado (Mismo estilo que CRÉDITOS)
-        const titulo = this.add.text(W / 2.01, 290, '¿CÓMO JUGAR?', {
-            fontFamily: '"Bowlby One SC", sans-serif',
-            fontSize: '100px',
-            color: '#ffffff',
-            letterSpacing: 4
+        // Caja de diálogo estilo sistema
+        this.add.rectangle(W / 2, H / 2, W * 0.7, 280, 0x0d0d1a, 0.96)
+            .setStrokeStyle(2, 0x4a9eff);
+
+        this.sysLabel = this.add.text(W / 2, H / 2 - 100, '◈ SISTEMA', {
+            fontFamily: 'monospace',
+            fontSize: '22px', color: '#4a9eff',
+            letterSpacing: 3,
         }).setOrigin(0.5);
 
-        // ── CONTENEDORES DE INFORMACIÓN (COLUMNA IZQUIERDA Y DERECHA) ──
-        const columnWidth = 400;
-        const columnGap = 140;
-        const totalColumnsWidth = (columnWidth * 2) + columnGap;
-        const columnsStartX = (W - totalColumnsWidth) / 2;
+        this.sysText = this.add.text(W / 2, H / 2 - 30, '', {
+            fontFamily: 'monospace',
+            fontSize: '28px', color: '#a0c8ff',
+            align: 'center',
+            wordWrap: { width: W * 0.62 },
+            lineSpacing: 8,
+        }).setOrigin(0.5, 0);
 
-        const colIzquierdaX = columnsStartX;
-        const colDerechaX = columnsStartX + columnWidth + columnGap;
+        this.prompt = this.add.text(W / 2, H / 2 + 110, '[ PRESIONA CUALQUIER TECLA ]', {
+            fontFamily: 'monospace',
+            fontSize: '20px', color: '#4a9eff',
+        }).setOrigin(0.5);
 
-        const Y_START_HEADERS = 400; 
-        const Y_ROW_1         = 490;
-        const Y_ROW_2         = 650; 
-        const Y_ROW_3         = 795;
-
-        
-
-        // 🛡️ SECCIÓN A: DEFENSA Y MOVIMIENTO (Columna Izquierda)
-        this._drawSectionHeader(contenedor, colIzquierdaX, Y_START_HEADERS, 'MOVIMIENTO Y DEFENSA');
-        
-        this._drawControlRow(contenedor, colIzquierdaX, Y_ROW_1, 'TECLAS: ◀ / ▶', 'ESQUIVAR LATERAL', 'Evita ganchos moviéndote al lado opuesto.');
-        this._drawControlRow(contenedor, colIzquierdaX, Y_ROW_2, 'TECLA: ▼ (ABAJO)', 'AGACHADO (DUCK)', 'Pasa por debajo de golpes altos u obstáculos.');
-        this._drawControlRow(contenedor, colIzquierdaX, Y_ROW_3, 'TECLA: ▲ (ARRIBA)', 'GUARDIA FIRME', 'Mitiga el impacto directo (Chip Damage).');
-
-        // 🥊 SECCIÓN B: ATAQUES Y CONTROL (Columna Derecha)
-        this._drawSectionHeader(contenedor, colDerechaX, Y_START_HEADERS, 'COMBATE Y CONSEJOS');
-
-        this._drawControlRow(contenedor, colDerechaX, Y_ROW_1, 'TECLAS: W / R', 'GOLPE ALTO (IZQ / DER)', 'Ataque rápido a la cabeza del Némesis.');
-        this._drawControlRow(contenedor, colDerechaX, Y_ROW_2, 'TECLAS: Q / E', 'GOLPE BAJO (IZQ / DER)', 'Gancho pesado al cuerpo del rival.');
-        
-        // El Súper Golpe resaltado en Cyan como en el ring
-        this._drawControlRow(contenedor, colDerechaX, Y_ROW_3, 'TECLA: ESPACIO', '¡SÚPER GOLPE CRÍTICO!', 'Requiere 100% de energía. Daño masivo de 50 HP.', '#00ffff');
-
-        // 4. Botón de Retorno inferior centrado
-        const btnVolver = this.add.text(W / 2, H - 160, '← VOLVER AL MENÚ', {
-            fontFamily: '"Bowlby One SC", Impact, sans-serif',
-            fontSize: '38px',
-            color: '#ffffff',
-            stroke: '#000000',
-            strokeThickness: 6
-        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-        contenedor.add([titulo, btnVolver]);
-
-        // Lógica de salida hacia el menú principal
-        btnVolver.on('pointerdown', () => {
-            this.cameras.main.fade(250, 0, 0, 0);
-            this.cameras.main.once('camerafadeoutcomplete', () => {
-                this.scene.start('MenuScene');
-            });
-        });
-
-        btnVolver.on('pointerover', () => btnVolver.setColor('#ffd700'));
-        btnVolver.on('pointerout', () => btnVolver.setColor('#ffffff'));
-
-        // Entrada animada elegante (Fade + Slide ascendente muy suave)
-        contenedor.setAlpha(0).setY(25);
         this.tweens.add({
-            targets: contenedor,
-            alpha: 1,
-            y: 0,
-            duration: 250,
-            ease: 'Cubic.Out'
+            targets: this.prompt, alpha: 0,
+            duration: 600, yoyo: true, repeat: -1,
+        });
+
+        // Estado
+        this.lines    = tutorialLines;
+        this.index    = 0;
+        this.typing   = false;
+        this.fullText = '';
+        this.charIdx  = 0;
+        this.typTimer = null;
+
+        this._showLine(0);
+
+        this.input.keyboard.on('keydown', this._onAdvance, this);
+        this.input.on('pointerdown', this._onAdvance, this);
+    }
+
+    _showLine(i) {
+        if (i >= this.lines.length) {
+            this._irACombate();
+            return;
+        }
+        this.index    = i;
+        this.fullText = this.lines[i].text;
+        this.charIdx  = 0;
+        this.typing   = true;
+        this.sysText.setText('');
+
+        if (this.typTimer) this.typTimer.remove();
+        this.typTimer = this.time.addEvent({
+            delay: 30,
+            repeat: this.fullText.length - 1,
+            callback: () => {
+                this.charIdx++;
+                this.sysText.setText(this.fullText.substring(0, this.charIdx));
+                if (this.charIdx >= this.fullText.length) this.typing = false;
+            },
         });
     }
 
-    // ── MÉTODOS AUXILIARES DE MAQUETACIÓN ESTILO CRÉDITOS ──
+    _onAdvance() {
+        if (this.typing) {
+            if (this.typTimer) this.typTimer.remove();
+            this.sysText.setText(this.fullText);
+            this.typing = false;
+            return;
+        }
+        this._showLine(this.index + 1);
+    }
 
-    /** Dibuja el encabezado minimalista de cada columna */
-    _drawSectionHeader(contenedor, x, y, title) {
-        const headerTxt = this.add.text(x, y, title, {
-            fontFamily: 'monospace',
-            fontSize: '24px',          // 💥 Subió a 24px (Corrección de '18xpx')
-            fontStyle: 'bold',
-            color: '#7ed7ff',
-            letterSpacing: 2           // Más separación entre letras para estilo premium
-        });
+    _irACombate() {
+    this.cameras.main.fade(500, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+        // Primero inicia CombatScene
+        this.scene.start('CombatScene');
         
-        // 🔥 MÁS ESPACIO: Bajamos la línea a 'y + 35' para que no corte el texto grande
-        // Aumentamos el ancho de la línea a 400 para cubrir el nuevo tamaño
-        const linea = this.add.rectangle(x, y + 35, 400, 2, 0x0f3460).setOrigin(0);
-        
-        contenedor.add([headerTxt, linea]);
-    }
-
-    /** Recrea la fila con la jerarquía visual vertical de los créditos */
-    _drawControlRow(contenedor, x, y, teclas, accion, desc, colorAccion = '#ffffff') {
-        // Renglón 1: Las teclas (Estilo "Cargo" de los créditos)
-        const teclasTxt = this.add.text(x, y, teclas, {
-            fontFamily: 'monospace',
-            fontSize: '18px',          // 💥 Subió de 16px a 18px
-            fontWeight: 'bold',
-            color: '#8a8a9a',
-            letterSpacing: 2
-        });
-
-        // Renglón 2: La acción (Estilo "Nombre" grande con Bowlby)
-        const accionTxt = this.add.text(x, y + 28, accion, {
-            fontFamily: '"Bowlby One SC", sans-serif',
-            fontSize: '36px',          // 💥 Subió de 28px a 36px (¡Ahora es enorme!)
-            color: colorAccion,
-        });
-
-        // Renglón 3: La descripción breve abajo en sans-serif discreto
-        const descTxt = this.add.text(x, y + 76, desc, {
-            fontFamily: 'sans-serif',
-            fontSize: '16px',          // 💥 Subió de 15px a 16px
-            color: '#71717a',
-            wordWrap: { width: 400 },   // Ampliado a 400 para que entren más palabras por línea con la nueva fuente
-            letterSpacing: 1
-        });
-
-        contenedor.add([teclasTxt, accionTxt, descTxt]);
-    }
+        // Espera un frame para que CombatScene termine su create()
+        // y luego emite show-enemy
+        // Si viene del tutorial, muestra los sprites después de un momento
+this.time.delayedCall(300, () => {
+    this.enemigo.setVisible(true);
+    this.jugador.setVisible(true);
+});
+    
+    });
+}
 }

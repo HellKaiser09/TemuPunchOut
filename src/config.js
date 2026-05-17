@@ -5,6 +5,11 @@ import { CombatScene }  from './scenes/CombatScene.js';
 import { EndScene }     from './scenes/EndScene.js';
 import  CoachScene       from './scenes/CoachScene.js';
 import { TutorialScene } from './scenes/TutorialScene.js';
+import { IntroScene }    from './scenes/IntroScene.js';
+
+
+// En el array de escenas:
+
 export const config = {
     type: Phaser.AUTO,
     width: 2170,
@@ -18,7 +23,8 @@ export const config = {
             debug: false
         }
     },
-    scene: [BootScene, MenuScene, CombatScene, DialogueScene, CoachScene, EndScene,TutorialScene]
+    scene: [BootScene, MenuScene, IntroScene, TutorialScene, CombatScene, DialogueScene, CoachScene, EndScene]
+    
 };
 
 

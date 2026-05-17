@@ -2,144 +2,140 @@ import { Paciente } from '../entities/Paciente.js';
 import { Nemesis } from '../entities/Nemesis.js';
 import { BuffSystem } from '../systems/BuffSystem.js';
 
-/**
- * Escena principal del bucle de combate.
- * Controla el flujo de los asaltos, la resolución de impactos, mitigaciones de daño,
- * y la persistencia de los estados lógicos y de juego.
- */
 export class CombatScene extends Phaser.Scene {
     constructor() {
         super({ key: 'CombatScene' });
     }
 
-    // ── MIGRACIÓN Y PERSISTENCIA DE DATOS ENTRE ROUNDS ──
     init(data) {
-        this.currentRound   = data?.currentRound ?? 1;
-        this.nemesisRevived  = data?.nemesisRevived ?? false;
-        this.savedPatientHp  = data?.savedPatientHp ?? 150;
-        this.pendingBuff     = data?.pendingBuff ?? null; 
+        this.currentRound   = data?.currentRound  ?? 1;
+        this.nemesisRevived = data?.nemesisRevived ?? false;
+        this.savedPatientHp = data?.savedPatientHp ?? 150;
+        this.pendingBuff    = data?.pendingBuff    ?? null;
     }
 
-    // ── INICIALIZACIÓN DE ASSETS Y ELEMENTOS DEL RING ──
     create() {
-        // 📐 SOLUCIÓN: Declaramos el tamaño de pantalla de forma segura para usar W y H
         const W = this.scale.width;
         const H = this.scale.height;
 
-        // 🖼️ EL FONDO VA PRIMERO para que ningún personaje quede oculto detrás
         this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H);
-        
-        // Transición cinematográfica de entrada suave
         this.cameras.main.fadeIn(500, 0, 0, 0);
 
-        // 🎬 1. REGISTRAR LA ANIMACIÓN DEL ENEMIGO (Usando tu asset del BootScene)
-        this.anims.create({
-            key: 'enemigo_batazo_izq',
-            frames: this.anims.generateFrameNumbers('hamburguesa_golpe_izq', { start: 0, end: 2 }),
-            frameRate: 12, // Velocidad arcade para el batazo
-            repeat: 0      // Se ejecuta una sola vez por golpe
-        });
+        if (!this.anims.exists('enemigo_batazo_izq')) {
+            this.anims.create({
+                key: 'enemigo_batazo_izq',
+                frames: [
+                    { key: 'hamburguesa_golpe_izq_1' },
+                    { key: 'hamburguesa_golpe_izq_2' },
+                    { key: 'hamburguesa_golpe_izq_3' },
+                ],
+                frameRate: 12,
+                repeat: 0
+            });
+        }
 
-        // Instanciación de entidades lógicas de tu compañero
-        this.nemesis = new Nemesis(this, W / 2, H / 2 - 50);
+        if (!this.anims.exists('enemigo_batazo_der')) {
+            this.anims.create({
+                key: 'enemigo_batazo_der',
+                frames: [
+                    { key: 'hamburguesa_golpe_der_1' },
+                    { key: 'hamburguesa_golpe_der_2' },
+                    { key: 'hamburguesa_golpe_der_3' },
+                ],
+                frameRate: 12,
+                repeat: 0
+            });
+        }
+
+        this.nemesis  = new Nemesis(this, W / 2, H / 2 - 50);
         this.paciente = new Paciente(this, W / 2, H - 120);
-        this.paciente.hp = this.savedPatientHp; 
-
-        // 🙈 OCULTAR RECTÁNGULO DE PRUEBA: Apagamos el cuadro de color plano de la entidad Némesis
-        // para que solo se vea tu personaje premium de la hamburguesa.
+        this.paciente.hp = this.savedPatientHp;
         this.nemesis.setVisible(false);
+        this.paciente.setVisible(false);
 
-        // 🍔 2. INYECTAR EL SPRITE DE LA HAMBURGUESA ANIMADA
-        this.enemigo = this.add.sprite(this.nemesis.x, this.nemesis.y + 60, 'hamburguesa_golpe_izq', 0);
-        this.enemigo.setScale(0.70);
-        this.enemigo.setDepth(10); // 🔥 FORZAR AL FRENTE: Evita que el fondo o la UI lo tapen
+        this.enemigo = this.add.sprite(this.nemesis.x, this.nemesis.y + 60, 'hamburguesa_golpe_izq_1');
+        this.enemigo.setScale(0.70).setDepth(10).setVisible(true);
 
-        // Retorno automático a la guardia al terminar el batazo
         this.enemigo.on('animationcomplete', (anim) => {
-            if (anim.key === 'enemigo_batazo_izq') {
-                this.enemigo.setFrame(0); 
+            if (anim.key === 'enemigo_batazo_izq' || anim.key === 'enemigo_batazo_der') {
+                this.enemigo.setTexture('hamburguesa_golpe_izq_1');
             }
         });
 
-        
-        // Cuando el script de Nemesis.js grite 'nemesis-atacar', tu sprite reacciona al instante
+        this.jugador = this.add.sprite(this.paciente.x, this.paciente.y, 'paciente_iddle');
+        this.jugador.setScale(0.60).setDepth(5).setVisible(true);
+        this.lastPacienteState = this.paciente.state;
+
         this.events.on('nemesis-atacar', (direccion) => {
-            if (direccion === 'IZQUIERDA') {
-                this.enemigo.play('enemigo_batazo_izq', true);
-            }
-            // NOTA: Si luego hacen la tira de la derecha, solo agregas:
-            // if (direccion === 'DERECHA') this.enemigo.play('enemigo_batazo_der', true);
+            if (direccion === 'IZQUIERDA') this.enemigo.play('enemigo_batazo_izq', true);
+            else if (direccion === 'DERECHA') this.enemigo.play('enemigo_batazo_der', true);
         });
 
-        // Base explícita para que los debuffs de daño del enemigo sí afecten ataques reales.
-        this.nemesis.base = { ...(this.nemesis.base ?? {}), damage: 10 };
+        this.nemesis.base   = { ...(this.nemesis.base ?? {}), damage: 10 };
         this.nemesis.damage = this.nemesis.damage ?? this.nemesis.base.damage;
 
-        // Inicialización del ecosistema de modificadores lógicos (BuffSystem)
         this.buffSystem = new BuffSystem(this, this.paciente, this.nemesis);
 
-        // ESCUCHADOR GLOBAL: Procesar la recompensa elegida en la esquina del Coach
-        this.events.off('coach-buff-chosen'); 
+        this.events.off('coach-buff-chosen');
         this.events.on('coach-buff-chosen', (buffId) => {
             this.currentRound++;
             this.scene.restart({
-                currentRound: this.currentRound,
+                currentRound:   this.currentRound,
                 savedPatientHp: this.paciente.hp,
                 nemesisRevived: this.nemesisRevived,
-                pendingBuff: buffId 
+                pendingBuff:    buffId
             });
         });
 
-        // ── MAQUETACIÓN DE LA INTERFAZ DE USUARIO (UI) ──
-        this.add.text(50, 30, `Paciente (Round ${this.currentRound}): `, { font: "16px Arial", fill: "#fff" });
+        this.add.text(50, 30, `Paciente (Round ${this.currentRound}):`, {
+            font: '16px Arial', fill: '#fff'
+        });
         this.pacienteHPbar = this.add.rectangle(50, 55, 250, 20, 0x00ff00).setOrigin(0, 0.5);
         this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
 
-        this.add.text(50, 85, "SÚPER:", { font: "12px monospace", fill: "#00ffff" });
+        this.add.text(50, 85, 'SÚPER:', { font: '12px monospace', fill: '#00ffff' });
         this.superBar = this.add.rectangle(100, 92, 0, 10, 0x00ffff).setOrigin(0, 0.5);
         this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
 
-        this.add.text(W - 300, 30, this.nemesisRevived ? 'NÉMESIS (💥 IRA CONSCIENTE)' : 'Némesis', { font: '16px Arial', fill: '#fff' });
+        this.add.text(W - 300, 30,
+            this.nemesisRevived ? 'AUTONÉMESIS (💥 IRA CONSCIENTE)' : 'AutoNémesis',
+            { font: '16px Arial', fill: '#fff' }
+        );
         this.nemesisHPBar = this.add.rectangle(W - 300, 55, 250, 20, 0xff0000).setOrigin(0, 0.5);
 
         if (this.nemesisRevived) {
-            this.nemesis.hp = 60; 
-            this.nemesis.attackTimer.delay = 2500; 
+            this.nemesis.hp = 60;
+            this.nemesis.attackTimer.delay = 2500;
         }
 
-        this.infoText = this.add.text(W / 2, 20, 'Estado: NEUTRAL', { font: '18px monospace', fill: '#ffff00' }).setOrigin(0.5);
-        this.countdownText = this.add.text(W / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
-        this.alertText = this.add.text(W / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
+        this.infoText = this.add.text(W / 2, 20, '', {
+            font: '18px monospace', fill: '#ffff00'
+        }).setOrigin(0.5);
 
-        // ── CONTENEDOR DIAGNÓSTICO DE BUFFS Y DEBUFFS ACTIVOS ──
-        this.add.rectangle(W / 2, H - 95, 920, 100, 0x0b1526, 0.82).setStrokeStyle(2, 0x4f8bd8);
-        this.effectsTitle = this.add.text(W / 2 - 445, H - 135, 'ESTADO DE COMBATE', {
-            font: '14px monospace', fill: '#7ed7ff', fontStyle: 'bold'
-        }).setOrigin(0, 0.5);
-        
-        this.buffLineText = this.add.text(W / 2 - 445, H - 112, 'BUFFS: ninguno', {
-            font: '13px monospace', fill: '#6dff9d', wordWrap: { width: 900 }
-        }).setOrigin(0, 0);
-        
-        this.debuffLineText = this.add.text(W / 2 - 445, H - 90, 'DEBUFFS: ninguno', {
-            font: '13px monospace', fill: '#ff8f8f', wordWrap: { width: 900 }
-        }).setOrigin(0, 0);
-        
-        this.statsLineText = this.add.text(W / 2 - 445, H - 68, 'STATS: --', {
-            font: '13px monospace', fill: '#e5e7eb', wordWrap: { width: 900 }
-        }).setOrigin(0, 0);
+        this.countdownText = this.add.text(W / 2, 60, '', {
+            font: '48px Arial', fill: '#00ff00', fontStyle: 'bold'
+        }).setOrigin(0.5).setVisible(false);
 
-        // FLUJO DE INTERCEPCIÓN DE BUFFS
+        this.alertText = this.add.text(W / 2, 110, '', {
+            font: '22px Arial', fill: '#ff3333', fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        this.buffHintText = this.add.text(W / 2, H - 40, '', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '26px',
+            color: '#ffd700',
+            fontStyle: 'italic',
+            align: 'center',
+        }).setOrigin(0.5).setDepth(20);
+
         const registryPendingBuff = this.registry.get('pendingBuff');
-        if (!this.pendingBuff && registryPendingBuff) {
-            this.pendingBuff = registryPendingBuff;
-        }
+        if (!this.pendingBuff && registryPendingBuff) this.pendingBuff = registryPendingBuff;
 
         if (this.pendingBuff) {
-            console.log(`[SISTEMA] Activando efectos de: ${this.pendingBuff} para el Round ${this.currentRound}`);
             this.buffSystem.apply(this.pendingBuff);
+            this.registry.set('lastBuff', this.pendingBuff);
             this.registry.remove('pendingBuff');
-            this.pendingBuff = null; 
+            this.pendingBuff = null;
         }
 
         this._refreshCombatUI();
@@ -148,158 +144,139 @@ export class CombatScene extends Phaser.Scene {
     update() {
         this.paciente.update();
 
-        // 🔥 IMÁN DE POSITION: La hamburguesa copia la X y la Y lógica de Jesús en cada frame
-        if (this.enemigo && this.nemesis) {
-            this.enemigo.x = this.nemesis.x;
-            this.enemigo.y = this.nemesis.y + 60; // Mantiene el ajuste de piso del ring
+        if (this.jugador && this.paciente) {
+            this.jugador.x = this.paciente.x;
+            this.jugador.y = this.paciente.y;
+
+            if (this.paciente.state !== this.lastPacienteState) {
+                this._updateJugadorTextura(this.paciente.state);
+                this.lastPacienteState = this.paciente.state;
+            }
         }
 
-        // Sincronización de las líneas de estados del panel de control inferior
+        if (this.enemigo && this.nemesis) {
+            this.enemigo.x = this.nemesis.x;
+            this.enemigo.y = this.nemesis.y + 60;
+        }
+
         this._refreshCombatUI();
-    }
-    
-    _getOnHitBonus() {
-        const onHitEffects = this.registry.get('onHitBuff') ?? [];
-        return onHitEffects
-            .filter(effect => effect.stat === 'courage' && effect.targetKey === 'self')
-            .reduce((acc, effect) => acc + effect.value, 0);
     }
 
     _refreshCombatUI() {
-        if (!this.buffLineText || !this.debuffLineText || !this.statsLineText || !this.buffSystem || !this.paciente || !this.nemesis) return;
+        if (!this.buffSystem || !this.paciente || !this.nemesis) return;
+        if (!this.buffHintText) return;
 
-        const active = this.buffSystem.getActiveBuffs();
-        const toLabel = (mod) => {
-            const side = mod.targetKey === 'enemy' ? 'NEMESIS' : 'PACIENTE';
-            const rounds = typeof mod.rounds === 'number' ? `${mod.rounds}r` : 'inst';
-            if (mod.type === 'immunity') return `${side}:inmune(${mod.value}, ${rounds})`;
-            if (mod.type === 'block') return `${side}:bloquea(${mod.value}, ${rounds})`;
-            if (mod.type === 'on_hit') return `${side}:on_hit(${rounds})`;
-            const stat = mod.effect?.stat ?? 'stat';
-            return `${side}:${stat}(${rounds})`;
+        const active   = this.buffSystem.getActiveBuffs();
+        const lastBuff = this.registry.get('lastBuff');
+
+        const hints = {
+            'autoestima':     '💚 Recuerda por qué elegiste el diseño.',
+            'limites':        '🚧 Tu miedo solo tiene el poder que tú le das.',
+            'vulnerabilidad': '🔥 Mostrarte es tu mayor fortaleza ahora.',
+            'perdonarte':     '🕊️ Suelta el peso. Estás más ligero.',
         };
 
-        const buffMods = active.filter(mod => mod.sourceTag !== 'debuff');
-        const debuffMods = active.filter(mod => mod.sourceTag === 'debuff' || mod.targetKey === 'enemy');
-        
-        const buffLine = buffMods.length ? buffMods.map(toLabel).join(' | ') : 'ninguno';
-        const debuffLine = debuffMods.length ? debuffMods.map(toLabel).join(' | ') : 'ninguno';
-
-        this.buffLineText.setText(`BUFFS: ${buffLine}`);
-        this.debuffLineText.setText(`DEBUFFS: ${debuffLine}`);
-        this.statsLineText.setText(
-            `STATS: Daño Némesis ${this.nemesis.damage} | Crit Paciente ${this.paciente.critDamage}% | Bonus energía por golpe +${this._getOnHitBonus()}% | Bloqueo manipulación ${this.buffSystem.isAbilityBlocked('manipulacion') ? 'SI' : 'NO'}`
+        this.buffHintText.setText(
+            active.length > 0 && lastBuff ? (hints[lastBuff] || '') : ''
         );
     }
 
-    // ── SISTEMA DE EVENTOS OFENSIVOS DEL PROTAGONISTA ──
     procesarGolpeJugador(tipo) {
         const bloqueandoPorVentana = this.nemesis.state === 'ATACANDO';
         const blockChance = bloqueandoPorVentana ? 0.70 : 0.32;
 
         if (Math.random() < blockChance) {
-            // Caso A: El golpe impacta en la guardia de la hamburguesa
             this.infoText.setText('¡Bloqueado por el Némesis!');
             this.alertText.setText('¡BLOQUEO!');
-            
-            // 🔥 MODIFICADO: Aplicamos el tinte gris de bloqueo directamente sobre tu nuevo Sprite
-            this.enemigo.setTint(0x555555); 
-            
+            this.enemigo.setTint(0x555555);
             this.time.delayedCall(150, () => {
-                this.enemigo.clearTint(); // Limpiamos el color gris
+                this.enemigo.clearTint();
                 this.alertText.setText('');
             });
         } else {
-            // Caso B: El golpe conecta directo en el cuerpo del enemigo
-            let damageCalculado = (tipo.includes('BAJO')) ? 8 : 12; 
-            
+            let damageCalculado = tipo.includes('BAJO') ? 8 : 12;
+
             let esCritico = false;
-            if (this.paciente.critDamage > 0 && Math.random() < 0.35) { 
+            if (this.paciente.critDamage > 0 && Math.random() < 0.35) {
                 const extraDamage = Math.round(damageCalculado * (this.paciente.critDamage / 100));
                 damageCalculado += extraDamage;
                 esCritico = true;
             }
 
             this.nemesis.hp -= damageCalculado;
-            
+
             if (esCritico) {
-                this.infoText.setText(`💥 ¡CRÍTICO! Golpe ${tipo} (-${damageCalculado} HP)`);
-                this.alertText.setText('💥 CRÍTICO 💥');
+                this.infoText.setText(`¡CRÍTICO! Golpe ${tipo} (-${damageCalculado} HP)`);
+                this.alertText.setText('CRÍTICO');
                 this.time.delayedCall(600, () => this.alertText.setText(''));
             } else {
                 this.infoText.setText(`¡Golpe ${tipo}! (-${damageCalculado} HP)`);
             }
-            
-            let bonoEnergiaExtra = 0;
+
             const onHitEffects = this.registry.get('onHitBuff') ?? [];
+            let bonoEnergiaExtra = 0;
             onHitEffects.forEach(effect => {
                 if (effect.stat === 'courage' && (effect.targetKey === 'self' || effect.target === this.paciente)) {
-                    bonoEnergiaExtra += effect.value; 
+                    bonoEnergiaExtra += effect.value;
                 }
             });
 
             this.paciente.superMeter = Math.min(100, this.paciente.superMeter + 10 + bonoEnergiaExtra);
             this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
-
             this.nemesisHPBar.setSize((Math.max(0, this.nemesis.hp) / 100) * 250, 20);
-            this.cameras.main.shake(80, 0.01); 
-            
-            // 🔥 MODIFICADO: Destello momentáneo blanco en tu hamburguesa
-            this.enemigo.setTint(0xffffff); 
-            
-            // 🔥 MODIFICADO: El Tween de impacto deforma ligeramente a la hamburguesa (Juice visual)
+            this.cameras.main.shake(80, 0.01);
+
+            this.enemigo.setTint(0xffffff);
             this.tweens.add({
                 targets: this.enemigo,
-                scaleX: 1.6, 
-                duration: 50, 
+                scaleX: 1.6,
+                duration: 50,
                 yoyo: true,
-                onComplete: () => { this.enemigo.clearTint(); }
+                onComplete: () => this.enemigo.clearTint()
             });
 
             if (this.nemesis.hp <= 0) this.terminarCombate(true);
         }
     }
 
-    // ── CONTROL DEL SÚPER ATAQUE CINEMÁTICO ──
     procesarSuperJugador() {
-        // 🔥 MODIFICADO: Tinte cyan directamente a tu personaje animado
         this.enemigo.setTint(0x00ffff);
-        this.cameras.main.flash(300, 0, 255, 255); 
-        this.cameras.main.shake(500, 0.03); 
+        this.cameras.main.flash(300, 0, 255, 255);
+        this.cameras.main.shake(500, 0.03);
 
-        this.nemesis.hp -= 50; 
+        this.nemesis.hp -= 50;
         this.nemesisHPBar.setSize((Math.max(0, this.nemesis.hp) / 100) * 250, 20);
 
         this.tweens.add({
             targets: this.paciente,
-            y: this.paciente.baseY - 80, scaleX: 1.3, duration: 200, yoyo: true,
+            y: this.paciente.baseY - 80,
+            scaleX: 1.3,
+            duration: 200,
+            yoyo: true,
             onComplete: () => {
                 this.paciente.y = this.paciente.baseY;
                 this.paciente.setScale(1, 1);
-                
                 if (this.nemesis.hp <= 0) {
                     this.terminarCombate(true);
                 } else {
-                    this.enemigo.clearTint(); // Limpiar rastro de color cyan
-                    this.paciente.state = 'NEUTRAL'; 
-                    this.infoText.setText('Estado: NEUTRAL');
+                    this.enemigo.clearTint();
+                    this.paciente.state = 'NEUTRAL';
+                    this.infoText.setText('');
                 }
             }
         });
     }
 
-    // ── SISTEMA DE RESOLUCIÓN DE IMPACTOS DE LA INTELIGENCIA ARTIFICIAL ──
     procesarGolpeNemesis(data = {}) {
         if (this.paciente.hp <= 0) return;
 
-        const dañoBaseNemesis = this.nemesis.damage ?? 10;
-        const { tipo = 'LATERAL', direccion = 'NINGUNA', dano = dañoBaseNemesis } = data;
+        const dañoBase = this.nemesis.damage ?? 10;
+        const { tipo = 'LATERAL', direccion = 'NINGUNA', dano = dañoBase } = data;
 
         if (tipo === 'ESPECIAL') {
             this.paciente.hp = Math.max(0, this.paciente.hp - dano);
             this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
             this.cameras.main.shake(80, 0.01);
-
             if (this.paciente.hp <= 0) this.terminarCombate(false);
             return;
         }
@@ -311,25 +288,23 @@ export class CombatScene extends Phaser.Scene {
         if (tipo === 'LATERAL') {
             if (direccion === 'IZQUIERDA' && this.paciente.lastDodgeDirection === 'DERECHA') {
                 evadido = true;
-                razon   = '¡Esquive perfecto! (IZQ → moviste DER)';
+                razon   = '¡Esquive perfecto!';
             }
             if (direccion === 'DERECHA' && this.paciente.lastDodgeDirection === 'IZQUIERDA') {
                 evadido = true;
-                razon   = '¡Esquive perfecto! (DER → moviste IZQ)';
+                razon   = '¡Esquive perfecto!';
             }
         }
 
-        if (tipo === 'ARRIBA' || tipo === 'ESPECIAL') {
+        if (tipo === 'ARRIBA') {
             if (this.paciente.state === 'AGACHADO' || this.paciente.isDucking) {
                 evadido = true;
-                razon = tipo === 'ARRIBA' ? '¡Pasó por arriba! (te agachaste)' : '¡Esquivaste el letrero!';
+                razon   = '¡Pasó por arriba!';
             }
         }
 
-        if (!evadido && this.paciente.state === 'BLOQUEANDO') {
-            bloqueado = true;
-        }
-        
+        if (!evadido && this.paciente.state === 'BLOQUEANDO') bloqueado = true;
+
         if (evadido) {
             this.infoText.setText(`✓ ${razon}`);
         } else if (bloqueado) {
@@ -340,37 +315,28 @@ export class CombatScene extends Phaser.Scene {
             this.cameras.main.shake(50, 0.005);
         } else {
             let dañoFinal = dano;
-            
             if (this.paciente.critDamage > 0) {
-                dañoFinal = Math.round(dañoFinal * 1.25); 
-                this.infoText.setText(`✗ ¡Impacto amplificado por Vulnerabilidad! (-${dañoFinal} HP)`);
+                dañoFinal = Math.round(dañoFinal * 1.25);
+                this.infoText.setText(`✗ ¡Impacto amplificado! (-${dañoFinal} HP)`);
             } else {
                 this.infoText.setText(`✗ ¡Golpe directo! (-${dañoFinal} HP)`);
             }
-
             this.paciente.hp = Math.max(0, this.paciente.hp - dañoFinal);
             this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
-            
             this.cameras.main.shake(250, 0.025);
-            this.cameras.main.flash(100, 255, 0, 0); 
+            this.cameras.main.flash(100, 255, 0, 0);
         }
 
         this.time.delayedCall(300, () => {
             this.paciente.lastDodgeDirection = 'NINGUNA';
             this.alertText.setText('');
-
-            if (this.paciente.state === 'NEUTRAL') {
-                this.infoText.setText('Estado: NEUTRAL');
-            }
-
-            if (this.paciente.hp <= 0) {
-                this.terminarCombate(false);
-            }
+            if (this.paciente.state === 'NEUTRAL') this.infoText.setText('');
+            if (this.paciente.hp <= 0) this.terminarCombate(false);
         });
     }
 
     terminarCombate(victoria) {
-        this.nemesis.attackTimer.destroy(); 
+        this.nemesis.attackTimer.destroy();
 
         if (!victoria) {
             this.cameras.main.fade(800, 0, 0, 0);
@@ -381,58 +347,82 @@ export class CombatScene extends Phaser.Scene {
         }
 
         if (this.currentRound === 1 || this.currentRound === 2) {
-            this.paciente.state = 'CINEMATIC'; 
-            this.buffSystem.tickRound(); 
-
+            this.paciente.state = 'CINEMATIC';
+            this.buffSystem.tickRound();
             this.scene.launch('CoachScene', {
-                round: this.currentRound,
-                playerHp: this.paciente.hp,
-                playerMaxHp: this.paciente.maxHp,
+                round:        this.currentRound,
+                playerHp:     this.paciente.hp,
+                playerMaxHp:  this.paciente.maxHp,
                 playerEnergy: this.paciente.superMeter
             });
 
         } else if (this.currentRound === 3) {
+            this.paciente.state = 'CINEMATIC';
+
             if (!this.nemesisRevived) {
-                this.paciente.state = 'CINEMATIC';
-
                 const lineasResurreccion = [
-                    { speaker: 'patient', text: '¡Se acabó!, pensaba que me que me iba tomar de 6 a 7 rounds.' },
-                    { speaker: 'dr', text: '¿Eso crees? El servicio al cliente te está llamando.' },
+                    { speaker: 'patient', text: '¡Se acabó! Pensaba que me iba a tomar de 6 a 7 rounds.' },
+                    { speaker: 'dr',      text: '¿Eso crees? El servicio al cliente te está llamando.' },
                     { speaker: 'nemesis', text: 'Jajaja... No puedes borrarme con puños. ¡SOY TU PROPIA CULPA!' },
-                    { speaker: 'dr', text: '¡Hey! No estudiaste para terminar ahí, puedes vencerlo.' },
-                    { speaker: 'patient', text: 'Es verdad... Solo necesito resistir un poco más y vencerme.' }
+                    { speaker: 'dr',      text: '¡Hey! No estudiaste para terminar ahí, puedes vencerlo.' },
+                    { speaker: 'patient', text: 'Es verdad... Solo necesito resistir un poco más.' }
                 ];
-
                 this.cameras.main.fade(500, 0, 0, 0);
                 this.cameras.main.once('camerafadeoutcomplete', () => {
                     this.scene.start('DialogueScene', {
-                        lines: lineasResurreccion,
+                        lines:     lineasResurreccion,
                         nextScene: 'CombatScene',
-                        nextData: {
-                            currentRound: 3,
-                            nemesisRevived: true, 
+                        nextData:  {
+                            currentRound:   3,
+                            nemesisRevived: true,
                             savedPatientHp: this.paciente.hp
                         }
                     });
                 });
             } else {
-                this.paciente.state = 'CINEMATIC';
-                
                 const lineasVictoriaFinal = [
                     { speaker: 'nemesis', text: 'No... puede... ser... Te estás... aceptando...' },
                     { speaker: 'patient', text: 'Adiós, viejo. Creo que dejaré de tener tan poca confianza en mí mismo.' },
-                    { speaker: 'system', text: '◈ ENHORABUENA: Has superado tus demonios internos.' }
+                    { speaker: 'system',  text: '◈ ENHORABUENA: Has superado tus demonios internos.' }
                 ];
-
                 this.cameras.main.fade(1000, 0, 0, 0);
                 this.cameras.main.once('camerafadeoutcomplete', () => {
                     this.scene.start('DialogueScene', {
-                        lines: lineasVictoriaFinal,
+                        lines:     lineasVictoriaFinal,
                         nextScene: 'EndScene',
-                        nextData: { victoria: true }
+                        nextData:  { victoria: true }
                     });
                 });
             }
         }
+    }
+
+    _updateJugadorTextura(estado) {
+        if (!this.jugador) return;
+
+        let textura = 'paciente_iddle';
+
+        if (estado === 'ATACANDO' && this.paciente.lastPunchType) {
+            const punchMap = {
+                'ALTO_IZQ': 'paciente_arriba_izq',
+                'ALTO_DER': 'paciente_arriba_der',
+                'BAJO_IZQ': 'paciente_abajo_izq',
+                'BAJO_DER': 'paciente_abajo_der',
+            };
+            textura = punchMap[this.paciente.lastPunchType] || 'paciente_iddle';
+        } else {
+            const texturaMap = {
+                'NEUTRAL':     'paciente_iddle',
+                'ESQUIVE_IZQ': 'paciente_esquive_izq',
+                'ESQUIVE_DER': 'paciente_esquive_der',
+                'AGACHADO':    'paciente_iddle',
+                'BLOQUEANDO':  'paciente_iddle',
+                'RECOVERY':    'paciente_iddle',
+                'CINEMATIC':   'paciente_iddle'
+            };
+            textura = texturaMap[estado] || 'paciente_iddle';
+        }
+
+        this.jugador.setTexture(textura);
     }
 }
