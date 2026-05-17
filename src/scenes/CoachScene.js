@@ -90,10 +90,47 @@ export default class CoachScene extends Phaser.Scene {
             color: '#7ed7ff',
             letterSpacing: 2
         });
+        tituloSeccion.setText('ELECCIÓN DE APOYO');
         this.contenedorOpciones.add(tituloSeccion);
 
         // IDs del catálogo de habilidades de Jesús
         const buffIds = Object.keys(BUFF_CATALOG); // ['autoestima', 'limites', 'vulnerabilidad', 'perdonarte']
+
+        const panelX = W - 440;
+        const panelY = 130;
+        const panelW = 360;
+        const panelH = 380;
+        const infoBg = this.add.rectangle(panelX, panelY, panelW, panelH, 0x081019, 0.95)
+            .setOrigin(0)
+            .setStrokeStyle(2, 0x4f8bd8);
+        const infoTitle = this.add.text(panelX + 30, panelY + 30, 'PASA EL CURSOR', {
+            fontFamily: 'monospace',
+            fontSize: '26px',
+            fontStyle: 'bold',
+            color: '#9ad7ff',
+            wordWrap: { width: panelW - 60 }
+        }).setOrigin(0, 0);
+        const infoSub = this.add.text(panelX + 30, panelY + 76, 'para ver la descripción', {
+            fontFamily: 'sans-serif',
+            fontSize: '18px',
+            color: '#cfd8ff',
+            wordWrap: { width: panelW - 60 }
+        }).setOrigin(0, 0);
+        this.descriptionTitle = this.add.text(panelX + 30, panelY + 130, '', {
+            fontFamily: 'sans-serif',
+            fontSize: '28px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            wordWrap: { width: panelW - 60 }
+        }).setOrigin(0, 0);
+        this.descriptionText = this.add.text(panelX + 30, panelY + 180, 'Selecciona una opción para ver de qué sirve.', {
+            fontFamily: 'sans-serif',
+            fontSize: '22px',
+            color: '#dfe7ff',
+            wordWrap: { width: panelW - 60 },
+            lineSpacing: 8
+        }).setOrigin(0, 0);
+        this.contenedorOpciones.add([infoBg, infoTitle, infoSub, this.descriptionTitle, this.descriptionText]);
 
         buffIds.forEach((id, i) => {
             const buff = BUFF_CATALOG[id];
@@ -151,11 +188,15 @@ export default class CoachScene extends Phaser.Scene {
             zona.on('pointerover', () => {
                 hoverGfx.setVisible(true); // Encendemos el fondo de la banda
                 botonTexto.setColor('#16213e'); // Cambia a azul marino oscuro plano para contrastar con el blanco
+                this.descriptionTitle.setText(`${buff.name.toUpperCase()}`);
+                this.descriptionText.setText(buff.desc);
             });
 
             zona.on('pointerout', () => {
                 hoverGfx.setVisible(false); // Apagamos el fondo de la banda
                 botonTexto.setColor('#ffffff');  // Regresa a blanco puro
+                this.descriptionTitle.setText('');
+                this.descriptionText.setText('Selecciona una opción para ver de qué sirve.');
             });
 
             // Al dar click en cualquier parte de la caja del botón, procesa la mejora y regresa al ring

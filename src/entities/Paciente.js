@@ -6,6 +6,7 @@ export class Paciente extends Phaser.GameObjects.Rectangle {
         this.scene = scene;
         this.hp = 150;
         this.maxHp = 150;
+        this.damage = 10;
         this.superMeter = 0;
         this.baseY = y;
         this.state = "NEUTRAL";
