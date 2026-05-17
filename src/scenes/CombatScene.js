@@ -130,10 +130,25 @@ inicializa el HUD redondeado y configura los eventos de transición.
             });
         }
 
+        // ── Animación de daño genérico del némesis ────────────
+        // Se reproduce en TODOS los golpes que conectan del jugador,
+        // sin importar el round ni si el némesis revivió.
+        if (!this.anims.exists('daño_burguer')) {
+            this.anims.create({
+                key: 'daño_burguer',
+                frames: [
+                    { key: 'verguado1' },
+                    { key: 'verguado2' },
+                ],
+                frameRate: 14, repeat: 0
+            });
+        }
+
         // ── Animaciones exclusivas de némesis revivido ────────
-        // Solo se registran una vez; se activan en procesarGolpeJugador
-        // como feedback visual de RECIBIR daño, no como ataque.
-        // Reemplazan la reacción de golpe normal cuando nemesisRevived === true.
+        // Se activan en procesarGolpeJugador como capa adicional de
+        // feedback dramático cuando nemesisRevived === true.
+        // La animación base de daño (daño_burguer) sigue reproduciéndose
+        // en ambos casos; estas se encadenan al terminar daño_burguer.
         if (!this.anims.exists('golpe_final_derecho')) {
             this.anims.create({
                 key: 'golpe_final_derecho',
@@ -184,12 +199,11 @@ inicializa el HUD redondeado y configura los eventos de transición.
 
         this.enemigo.on('animationcomplete', (anim) => {
             // Al terminar cualquier animación de reacción a daño vuelve a idle.
-            // Incluye las animaciones "final_*" que ahora son feedback de daño
-            // en el round del némesis revivido.
             const animsDeReaccion = [
                 'enemigo_batazo_izq',
                 'enemigo_batazo_der',
                 'enemigo_batazo_arriba',
+                'daño_burguer',
                 'golpe_final_derecho',
                 'golpe_final_izquierdo',
                 'golpe_final_arriba',
@@ -205,8 +219,6 @@ inicializa el HUD redondeado y configura los eventos de transición.
         this.lastPacienteState = this.paciente.state;
 
         // ── Eventos del nemesis ───────────────────────────────
-        // 'nemesis-atacar' → solo dispara las animaciones de ATAQUE del enemigo.
-        // Las animaciones "final_*" ya NO se usan aquí; pertenecen al feedback de daño.
         this.events.on('nemesis-atacar', (direccion) => {
             if (direccion === 'IZQUIERDA')     this.enemigo.play('enemigo_batazo_izq',    true);
             else if (direccion === 'DERECHA')  this.enemigo.play('enemigo_batazo_der',    true);
@@ -362,9 +374,9 @@ Procesa los golpes del jugador contra el némesis. Si el némesis está en anima
 compatible con el tipo de golpe, lo bloquea; de lo contrario aplica daño normal.
 - enemigo_bloqueoarriba bloquea golpes ALTO_IZQ y ALTO_DER.
 - enemigo_bloqueoabajo  bloquea golpes BAJO_IZQ y BAJO_DER.
-Cuando nemesisRevived === true, la reacción visual de recibir daño usa las
-animaciones "golpe_final_*" en lugar de setTexture directo, para dar mayor
-feedback dramático de que el jefe está siendo golpeado.
+Cuando un golpe conecta, SIEMPRE se reproduce 'daño_burguer' (verguado1/verguado2)
+como feedback universal de daño. En el round del némesis revivido además se encadena
+la animación 'golpe_final_*' correspondiente a la dirección para mayor dramatismo.
 ------------------------------------------- */
     procesarGolpeJugador(tipo) {
         // ── Comprobación de bloqueo direccional del némesis ───
@@ -421,27 +433,26 @@ feedback dramático de que el jefe está siendo golpeado.
             this.nemesis.hp -= damageCalculado;
 
             // ── Feedback visual de daño recibido ──────────────
-            // Round normal: setTexture directo para reacción rápida.
-            // Némesis revivido: animaciones "golpe_final_*" más dramáticas
-            // que representan que el jefe está siendo golpeado/dañado.
+            // 'daño_burguer' se reproduce SIEMPRE que un golpe conecta
+            // (verguado1 → verguado2) en ambos rounds.
+            // Si el némesis está revivido, al completarse daño_burguer se
+            // encadena la animación final direccional para mayor impacto.
+            // En ambos casos el listener global 'animationcomplete' devuelve el sprite a idle.
             if (this.nemesisRevived) {
-                const esIzq   = tipo.includes('IZQ');
                 const esArriba = tipo.includes('ALTO');
+                const esIzq    = tipo.includes('IZQ');
 
-                if (esArriba) {
-                    this.enemigo.play('golpe_final_arriba', true);
-                } else if (esIzq) {
-                    this.enemigo.play('golpe_final_izquierdo', true);
-                } else {
-                    this.enemigo.play('golpe_final_derecho', true);
-                }
-                // La vuelta a idle la gestiona el listener 'animationcomplete'.
-            } else {
-                const esIzq = tipo.includes('IZQ');
-                this.enemigo.setTexture(esIzq ? 'hamburguesa_golpe_izq_1' : 'hamburguesa_golpe_der_1');
-                this.time.delayedCall(250, () => {
-                    if (this.enemigo?.active) this.enemigo.play('enemigo_idle', true);
+                this.enemigo.play('daño_burguer', true);
+                this.enemigo.once('animationcomplete', () => {
+                    if (!this.enemigo?.active) return;
+                    if (esArriba)   this.enemigo.play('golpe_final_arriba',    true);
+                    else if (esIzq) this.enemigo.play('golpe_final_izquierdo', true);
+                    else            this.enemigo.play('golpe_final_derecho',    true);
+                    // La vuelta a idle queda en manos del listener global 'animationcomplete'.
                 });
+            } else {
+                // Round normal: solo daño_burguer; idle lo gestiona animationcomplete.
+                this.enemigo.play('daño_burguer', true);
             }
 
             this.audioSystem?.playGolpePaciente();
@@ -487,9 +498,13 @@ Ejecuta la animación y reducción masiva de salud por el Súper Golpe de Espaci
 
         this.nemesis.hp -= 50;
 
-        // Feedback de super-golpe: siempre usa la animación más dramática disponible.
+        // El super-golpe también reproduce daño_burguer.
+        // Si el némesis está revivido encadena golpe_final_arriba al terminar.
+        this.enemigo.play('daño_burguer', true);
         if (this.nemesisRevived) {
-            this.enemigo.play('golpe_final_arriba', true);
+            this.enemigo.once('animationcomplete', () => {
+                if (this.enemigo?.active) this.enemigo.play('golpe_final_arriba', true);
+            });
         }
 
         this.tweens.add({

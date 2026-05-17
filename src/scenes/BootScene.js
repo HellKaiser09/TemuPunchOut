@@ -96,6 +96,10 @@ export class BootScene extends Phaser.Scene {
         this.load.image('final6', 'src/assets/sprites/final6.png');
 
 
+        this.load.image('verguado1', 'src/assets/sprites/verguado1.png');
+        this.load.image('verguado2', 'src/assets/sprites/verguado2.png');
+
+
 
         //victoria final
         this.load.image('Fondo_victoria', 'src/assets/sprites/hambueguesa_oendeja_llorando.png');
