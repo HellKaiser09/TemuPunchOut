@@ -421,7 +421,7 @@ la animación 'golpe_final_*' correspondiente a la dirección para mayor dramati
                 });
             });
         } else {
-            let damageCalculado = tipo.includes('BAJO') ? 8 : 12;
+            let damageCalculado = tipo.includes('BAJO') ? 6 : 9;
             let esCritico = false;
 
             if (this.paciente.critDamage > 0 && Math.random() < 0.35) {
