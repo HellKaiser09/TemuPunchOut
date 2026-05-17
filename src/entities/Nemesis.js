@@ -1,4 +1,19 @@
 export class Nemesis extends Phaser.GameObjects.Rectangle {
+/* ---------------------------------------------
+¿Qué hace?
+Crea la entidad lógica del enemigo. Establece sus estadísticas base (vida, daño), su estado inicial, su catálogo de movimientos y arranca un temporizador (Timer) infinito que será el "cerebro" que decida cuándo atacar.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+- La vida (`hp` y `maxHp`).
+- El daño base (`damage`).
+- El tiempo entre ataques del Timer (`delay: 4500` = 4.5 segundos). Si bajas este número, el enemigo atacará más rápido.
+
+¿Qué controla?
+La inicialización de la Inteligencia Artificial en el ring.
+
+Importancia
+CRÍTICA. Define qué tan fuerte y rápido es tu jefe final.
+------------------------------------------- */
     constructor(scene, x, y) {
         super(scene, x, y, 300, 150, 0x882222);
         scene.add.existing(this);
@@ -16,7 +31,14 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
 
         // ── Catálogo de ataques ───────────────────────────────
         this.ataques = ['IZQUIERDA', 'DERECHA', 'ARRIBA', 'ESPECIAL'];
-        this.ultimoAtaque = null; // evita repetir el mismo dos veces seguidas
+        this.ultimoAtaque = null; 
+
+        // ── Objetos reutilizables para atacarEspecial() ────────
+        const W = scene.sys.game.config.width;
+        this.letreroEspecial = scene.add.rectangle(-100, scene.sys.game.config.height / 2, 160, 50, 0xffcc00);
+        this.letreroEspecialTexto = scene.add.text(this.letreroEspecial.x, this.letreroEspecial.y, '¡COMIDA RÁPIDA!', { fontSize: '13px', color: '#000', fontFamily: 'monospace' }).setOrigin(0.5);
+        this.letreroEspecial.setVisible(false);
+        this.letreroEspecialTexto.setVisible(false);
 
         // ── Timer principal ───────────────────────────────────
         this.attackTimer = scene.time.addEvent({
@@ -27,7 +49,19 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
         });
     }
 
-    // ── ELIGE ATAQUE (no repite el mismo dos veces) ───────────
+/* ---------------------------------------------
+¿Qué hace?
+Es la toma de decisiones de la IA. Revisa la lista de ataques, filtra el último que usó (para no repetir y ser predecible), elige uno al azar y ejecuta la función correspondiente.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+Puedes alterar las probabilidades. Actualmente todos tienen la misma posibilidad, pero podrías hacer que el ataque 'ESPECIAL' solo ocurra si su HP es menor a 50.
+
+¿Qué controla?
+El azar y la variedad del combate.
+
+Importancia
+ALTA. Evita que el jugador memorice un patrón exacto.
+------------------------------------------- */
     elegirAtaque() {
         if (this.state !== 'IDLE' || this.hp <= 0) return;
 
@@ -43,86 +77,82 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
         }
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  ATAQUE LATERAL (izquierda / derecha)
-    //  Jugador debe esquivar al lado contrario
-    // ══════════════════════════════════════════════════════════
+/* ---------------------------------------------
+¿Qué hace?
+Ejecuta la animación lógica de un gancho lateral. Tiene 3 fases: Preparación (se asoma), Ataque (se lanza e inflige daño) y Recovery (regresa a su posición dejando una ventana para que el jugador lo golpee).
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+- La distancia a la que se asoma (`offsetX * 0.3`).
+- Los tiempos de reacción: `duration: 400` para asomarse y `1500` ms de espera antes de soltar el golpe. 
+
+¿Qué controla?
+El telégrafo visual (la advertencia) para que el jugador tenga tiempo de esquivar.
+
+Importancia
+ALTA. Es el ataque principal del juego.
+------------------------------------------- */
     atacarLateral(direccion) {
         this.state        = 'CARGANDO';
         this.invulnerable = true;
 
         const offsetX = direccion === 'IZQUIERDA' ? -90 : 90;
 
-        // ── Fase 1: PREPARAR (animación ya existente) ─────────
+        // Fase 1: PREPARAR 
         this.scene.events.emit('nemesis-preparar', direccion);
         this._mostrarAlerta(`⚠ Golpe ${direccion}`, 1400);
 
-        // Movimiento de preparación — se inclina hacia el lado
         this.scene.tweens.add({
-            targets: this,
-            x: this.baseX + offsetX * 0.3,  // se asoma un poco
-            duration: 400,
-            ease: 'Sine.InOut',
+            targets: this, x: this.baseX + offsetX * 0.3, duration: 400, ease: 'Sine.InOut',
         });
 
-        // ── Fase 2: DURANTE — el golpe sale ───────────────────
+        // Fase 2: DURANTE 
         this.scene.time.delayedCall(1500, () => {
             this.state = 'ATACANDO';
             this.scene.events.emit('nemesis-atacar', direccion);
 
             this.scene.tweens.add({
-                targets: this,
-                x: this.baseX + offsetX,
-                duration: 120,
-                ease: 'Power3',
+                targets: this, x: this.baseX + offsetX, duration: 120, ease: 'Power3',
                 onComplete: () => {
                     this.scene.procesarGolpeNemesis({ tipo: 'LATERAL', direccion });
-
-                    // ── Fase 3: RECOVERY — ventana de castigo ─
+                    // Fase 3: RECOVERY 
                     this._iniciarRecovery(500);
                 }
             });
         });
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  ATAQUE ARRIBA
-    //  Jugador debe agacharse (↓)
-    // ══════════════════════════════════════════════════════════
+/* ---------------------------------------------
+¿Qué hace?
+Sube al enemigo en el eje Y para avisar que atacará por arriba, y luego lo baja rápidamente para golpear.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+Las posiciones `y: this.baseY - 60` (cuánto sube para avisar) y `y: this.baseY + 30` (cuánto baja al golpear).
+
+¿Qué controla?
+La obligación del jugador de usar la tecla de agacharse.
+
+Importancia
+MEDIA. Agrega verticalidad al combate.
+------------------------------------------- */
     atacarArriba() {
         this.state        = 'CARGANDO';
         this.invulnerable = true;
 
-        // ── Fase 1: PREPARAR — sube antes de golpear ─────────
         this.scene.events.emit('nemesis-preparar', 'ARRIBA');
         this._mostrarAlerta('⚠ ¡Golpe alto! Agáchate', 1400);
 
-        this.scene.tweens.add({
-            targets: this,
-            y: this.baseY - 60,           // sube visiblemente
-            duration: 500,
-            ease: 'Back.Out',
-        });
+        this.scene.tweens.add({ targets: this, y: this.baseY - 60, duration: 500, ease: 'Back.Out' });
 
-        // ── Fase 2: DURANTE — baja de golpe ──────────────────
         this.scene.time.delayedCall(1500, () => {
             this.state = 'ATACANDO';
             this.scene.events.emit('nemesis-atacar', 'ARRIBA');
 
             this.scene.tweens.add({
-                targets: this,
-                y: this.baseY + 30,       // golpea hacia abajo
-                duration: 110,
-                ease: 'Power3',
+                targets: this, y: this.baseY + 30, duration: 110, ease: 'Power3',
                 onComplete: () => {
                     this.scene.procesarGolpeNemesis({ tipo: 'ARRIBA' });
-
-                    // Regresa a posición base
                     this.scene.tweens.add({
-                        targets: this,
-                        y: this.baseY,
-                        duration: 200,
-                        ease: 'Sine.Out',
+                        targets: this, y: this.baseY, duration: 200, ease: 'Sine.Out',
                         onComplete: () => this._iniciarRecovery(500),
                     });
                 }
@@ -130,123 +160,96 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
         });
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  ATAQUE ESPECIAL — letrero giratorio
-    //  Jugador debe mantenerse agachado 3 segundos
-    //  Si no está abajo cuando el letrero pasa, recibe daño
-    // ══════════════════════════════════════════════════════════
+/* ---------------------------------------------
+¿Qué hace?
+El ataque final. Hace temblar al enemigo, genera un objeto nuevo (el letrero de "COMIDA RÁPIDA"), lo hace cruzar la pantalla y programa un temporizador (ticks) que castiga al jugador si no está agachado mientras el letrero vuela.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+- El daño por tick (`dano: 8`).
+- El tamaño del letrero (`160, 50`) y su color (`0xffcc00`).
+- La velocidad a la que cruza (`duration: 3000` ms).
+
+¿Qué controla?
+El evento más peligroso del juego, que exige que el jugador mantenga una postura prolongada.
+
+Importancia
+ALTA. Es el "Ultimate" del jefe.
+------------------------------------------- */
     atacarEspecial() {
         this.state        = 'CARGANDO';
         this.invulnerable = true;
-
         const W = this.scene.sys.game.config.width;
 
-        // ── Fase 1: PREPARAR — el Nemesis hace la animación ──
         this.scene.events.emit('nemesis-preparar', 'ESPECIAL');
         this._mostrarAlerta('⚠ ¡PODER ESPECIAL! ¡Agáchate y no te muevas!', 1200);
 
-        // Se sacude antes de lanzar
-        this.scene.tweens.add({
-            targets: this,
-            x: this.baseX + 15,
-            duration: 80,
-            yoyo: true,
-            repeat: 4,
-        });
+        this.scene.tweens.add({ targets: this, x: this.baseX + 15, duration: 80, yoyo: true, repeat: 4 });
 
         this.scene.time.delayedCall(1300, () => {
             this.state = 'ATACANDO';
             this.scene.events.emit('nemesis-atacar', 'ESPECIAL');
 
-            // ── Fase 2: DURANTE — el letrero cruza la pantalla ─
-            // Crea el objeto del letrero
-            const letrero = this.scene.add.rectangle(
-                -100,                              // empieza fuera de pantalla izq
-                this.scene.sys.game.config.height / 2,
-                160, 50,
-                0xffcc00
-            );
+            // Reutilizar objetos guardados en constructor en lugar de crear/destruir
+            const letrero = this.letreroEspecial;
+            const letreroTexto = this.letreroEspecialTexto;
+            
+            letrero.setPosition(-100, this.scene.sys.game.config.height / 2);
+            letreroTexto.setPosition(letrero.x, letrero.y);
+            letrero.setVisible(true);
+            letreroTexto.setVisible(true);
+            letrero.angle = 0;
+            letreroTexto.angle = 0;
 
-            const letreroTexto = this.scene.add.text(
-                letrero.x, letrero.y,
-                '¡COMIDA RÁPIDA!',
-                { fontSize: '13px', color: '#000000', fontFamily: 'monospace' }
-            ).setOrigin(0.5);
+            this.scene.tweens.add({ targets: [letrero, letreroTexto], angle: 360, duration: 800, repeat: -1 });
 
-            // Gira mientras vuela
             this.scene.tweens.add({
-                targets: [letrero, letreroTexto],
-                angle: 360,
-                duration: 800,
-                repeat: -1,
-            });
-
-            // Cruza la pantalla — tarda 3 segundos
-            this.scene.tweens.add({
-                targets: [letrero, letreroTexto],
-                x: W + 150,
-                duration: 3000,
-                ease: 'Linear',
+                targets: [letrero, letreroTexto], x: W + 150, duration: 3000, ease: 'Linear',
                 onComplete: () => {
-                    letrero.destroy();
-                    letreroTexto.destroy();
-
-                    // ── Fase 3: RECOVERY ──────────────────────
+                    letrero.setVisible(false);
+                    letreroTexto.setVisible(false);
                     this._iniciarRecovery(700);
                 }
             });
 
-            // Verificación continua durante los 3 segundos
-            // Cada 200ms revisa si el jugador está agachado
             let ticksDano = 0;
             this.specialCheckEvent = this.scene.time.addEvent({
-                delay: 200,
-                repeat: 14,                        // 14 × 200ms = ~3 seg
+                delay: 200, repeat: 14,
                 callback: () => {
                     const paciente = this.scene.paciente;
                     if (!paciente) return;
 
                     const estaAgachado = paciente.state === 'AGACHADO';
-
                     if (!estaAgachado) {
-                        // Recibe daño por tick — no mata de un golpe
-                        this.scene.procesarGolpeNemesis({
-                            tipo: 'ESPECIAL',
-                            dano: 8,               // daño por cada tick sin agacharse
-                        });
+                        this.scene.procesarGolpeNemesis({ tipo: 'ESPECIAL', dano: 8 });
                         ticksDano++;
-
-                        // Feedback: letrero parpadea rojo cuando conecta
-                        this.scene.tweens.add({
-                            targets: letrero,
-                            fillColor: 0xff2200,
-                            duration: 80,
-                            yoyo: true,
-                        });
+                        this.scene.tweens.add({ targets: letrero, fillColor: 0xff2200, duration: 80, yoyo: true });
                     }
                 }
             });
         });
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  RECOVERY — ventana donde SÍ se puede golpear
-    // ══════════════════════════════════════════════════════════
+/* ---------------------------------------------
+¿Qué hace?
+Abre la ventana de vulnerabilidad del enemigo. Quita el seguro (`invulnerable = false`), avisa al jugador y regresa al enemigo a su centro.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+El tiempo que se queda mareado esperando el golpe (`duracionMs`). 
+
+¿Qué controla?
+La recompensa del jugador por haber esquivado correctamente.
+
+Importancia
+ALTA. Si esto no se ejecuta, el jefe sería invencible.
+------------------------------------------- */
     _iniciarRecovery(duracionMs) {
         this.state        = 'RECOVERY';
-        this.invulnerable = false;        // ← ahora sí se puede golpear
+        this.invulnerable = false;        
 
         this.scene.events.emit('nemesis-recovery');
         this._mostrarAlerta('¡AHORA! Golpéalo', duracionMs - 50);
 
-        // Vuelve a posición base durante el recovery
-        this.scene.tweens.add({
-            targets: this,
-            x: this.baseX,
-            y: this.baseY,
-            duration: 200,
-            ease: 'Sine.Out',
-        });
+        this.scene.tweens.add({ targets: this, x: this.baseX, y: this.baseY, duration: 200, ease: 'Sine.Out' });
 
         this.scene.time.delayedCall(duracionMs, () => {
             this.state = 'IDLE';
@@ -255,9 +258,19 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
         });
     }
 
-    // ══════════════════════════════════════════════════════════
-    //  RECIBIR DAÑO
-    // ══════════════════════════════════════════════════════════
+/* ---------------------------------------------
+¿Qué hace?
+Descuenta HP, lanza el flash de impacto y premia al jugador reseteando el timer del IA si lo golpearon durante el recovery.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+El tiempo que tarda el destello blanco (`duration: 60`).
+
+¿Qué controla?
+La recepción de castigo de la máquina.
+
+Importancia
+ALTA. Es la función que permite avanzar en el juego al matar al jefe.
+------------------------------------------- */
     recibirDano(cantidad) {
         if (this.invulnerable) {
             this._feedbackInvulnerable();
@@ -266,36 +279,29 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
 
         this.hp = Math.max(0, this.hp - cantidad);
 
-        // Flash de impacto
         this.scene.tweens.add({
-            targets: this,
-            fillColor: 0xffffff,
-            duration: 60,
-            yoyo: true,
+            targets: this, fillColor: 0xffffff, duration: 60, yoyo: true,
             onComplete: () => { if (this.hp > 0) this.setFillStyle(0x882222); }
         });
 
-        // Golpear en recovery resetea el timer — le das más tiempo al jugador
         if (this.state === 'RECOVERY') {
-            this.attackTimer.reset({
-                delay: 4500,
-                callback: this.elegirAtaque,
-                callbackScope: this,
-                loop: true
-            });
+            this.attackTimer.reset({ delay: 4500, callback: this.elegirAtaque, callbackScope: this, loop: true });
         }
 
         return cantidad;
     }
 
-    // ── Verifica si un golpe del jugador conecta ──────────────
+/* ---------------------------------------------
+¿Qué hace? (MÉTODOS AUXILIARES)
+- puedeSerGolpeado: Evalúa lógicamente si el jugador está autorizado para hacerle daño en este instante.
+- _mostrarAlerta / _feedbackInvulnerable: Manejan los textos dinámicos de UI para avisar al jugador de un error o peligro.
+------------------------------------------- */
     puedeSerGolpeado(tipoPunch) {
         if (this.invulnerable) return false;
         if (this.state === 'IDLE' || this.state === 'CARGANDO') return false;
-        return true; // solo conecta en ATACANDO y RECOVERY
+        return true; 
     }
 
-    // ── Helpers visuales ──────────────────────────────────────
     _mostrarAlerta(mensaje, duracionMs) {
         if (!this.scene.alertText) return;
         this.scene.alertText.setText(mensaje);
@@ -307,12 +313,7 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
     }
 
     _feedbackInvulnerable() {
-        this.scene.tweens.add({
-            targets: this,
-            fillColor: 0xffdd00,
-            duration: 60,
-            yoyo: true,
-        });
+        this.scene.tweens.add({ targets: this, fillColor: 0xffdd00, duration: 60, yoyo: true });
         if (this.scene.infoText) {
             this.scene.infoText.setText('¡Está cargando, espera!');
             this.scene.time.delayedCall(600, () => {

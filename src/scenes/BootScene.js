@@ -1,3 +1,20 @@
+/* ---------------------------------------------
+¿Qué hace?
+Se encarga de precargar todos los recursos visuales (imágenes y spritesheets) en la memoria del navegador ANTES de que el juego realmente comience. Muestra un texto de progreso para que el jugador sepa que el juego no está trabado.
+
+¿Qué podemos cambiar (tamaños, espaciados, etc.)?
+- Las rutas de los archivos ('src/assets/sprites/...').
+- Las claves (keys) con las que bautizamos a cada imagen (ej. 'bg_menu').
+- Las dimensiones de corte (frameWidth y frameHeight) de los spritesheets.
+- El diseño, color, fuente y posición del texto de "Cargando...".
+
+¿Qué controla?
+El flujo inicial del juego. Garantiza que cuando las demás escenas (Menu, Combat, Dialogue) pidan una imagen, esta ya esté descargada y lista para usarse de inmediato. Al terminar de descargar todo, dispara automáticamente el cambio al 'MenuScene'.
+
+Importancia
+CRÍTICA. Si te equivocas en una ruta o en el nombre de un archivo aquí, la pantalla se quedará en negro, mostrará un cuadro verde de error, o el juego crasheará por completo.
+-------------------------------------------
+*/
 export class BootScene extends Phaser.Scene {
     constructor() {
         super({ key: 'BootScene' });
@@ -5,6 +22,10 @@ export class BootScene extends Phaser.Scene {
 
 
 preload() {
+    this.load.spritesheet('paciente_idle', 'src/assets/sprites/diseño.png', {
+    frameWidth: 932, // 👈 Calcula el ancho real de UN SOLO dibujo (Ancho total / cantidad de caras)
+    frameHeight: 475 // 👈 El alto real de la imagen
+});
     this.load.image('bg_menu', "src/assets/sprites/Frame_4.png");
     this.load.image('bg_menu_tutorial', "src/assets/sprites/Frame_6.png")
     this.load.image('coach_character_menu', "src/assets/sprites/Mesa_de_trabajo_6_1.png")
@@ -15,8 +36,11 @@ preload() {
     frameHeight: 851  // 🔥 El alto exacto de tu archivo
 });
 
-        const loadingText = this.add.text(400, 250, 'Cargando...', {
-            font: '24px Arial', fill: '#fff'
+        const W = this.scale.width;
+        const H = this.scale.height;
+
+        const loadingText = this.add.text(W / 2, H / 2, 'Cargando...', {
+            font: '32px Arial', fill: '#fff'
         }).setOrigin(0.5);
 
         this.load.on('progress', (v) => loadingText.setText(`Cargando... ${Math.floor(v * 100)}%`));

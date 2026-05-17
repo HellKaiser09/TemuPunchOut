@@ -369,10 +369,12 @@ export class CombatScene extends Phaser.Scene {
         });
     }
 
+// ── REGLAS DE ENRUTAMIENTO CINEMÁTICO Y NARRATIVO DEL RÉFERI ──
     terminarCombate(victoria) {
-        this.nemesis.attackTimer.destroy(); 
+        this.nemesis.attackTimer.destroy(); // Detenemos disparos de la IA
 
         if (!victoria) {
+            // Flujo A: Derrota absoluta -> Fundido a negro hacia la pantalla de KO
             this.cameras.main.fade(800, 0, 0, 0);
             this.cameras.main.once('camerafadeoutcomplete', () => {
                 this.scene.start('EndScene', { victoria: false });
@@ -380,23 +382,46 @@ export class CombatScene extends Phaser.Scene {
             return;
         }
 
+        // Flujo B: Victoria parcial -> Diálogo del Coach + Selección de Mejora (Rounds 1 y 2)
         if (this.currentRound === 1 || this.currentRound === 2) {
             this.paciente.state = 'CINEMATIC'; 
             this.buffSystem.tickRound(); 
 
-            this.scene.launch('CoachScene', {
-                round: this.currentRound,
-                playerHp: this.paciente.hp,
-                playerMaxHp: this.paciente.maxHp,
-                playerEnergy: this.paciente.superMeter
+            // Textos genéricos o dinámicos para cuando acaba el round
+            const lineasCoach = [
+                { speaker: 'dr', text: `¡Terminó el Round ${this.currentRound}! Tu mente está cansada, Paciente.` },
+                { speaker: 'dr', text: 'Escucha con atención y elige una herramienta mental antes de volver al ring...' }
+            ];
+
+            this.cameras.main.fade(500, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+                this.scene.start('DialogueScene', {
+                    lines: lineasCoach,
+                    mostrarMenuCoach: true, // 🔥 Esto hará que salgan las opciones al terminar de hablar
+                    nextScene: 'CombatScene',
+                    
+                    // Pasamos las vidas para el HUD superior
+                    playerHp: this.paciente.hp,
+                    playerMaxHp: this.paciente.maxHp,
+                    nemesisHp: this.nemesis.hp,
+                    nemesisMaxHp: this.nemesis.maxHp,
+
+                    // Mandamos la info para el siguiente round
+                    nextData: {
+                        currentRound: this.currentRound + 1, // 🔥 Aumentamos el round aquí
+                        savedPatientHp: this.paciente.hp,
+                        nemesisRevived: this.nemesisRevived
+                    }
+                });
             });
 
         } else if (this.currentRound === 3) {
+            // Flujo C: El clímax narrativo del tercer asalto (El "Falso Final")
             if (!this.nemesisRevived) {
                 this.paciente.state = 'CINEMATIC';
 
                 const lineasResurreccion = [
-                    { speaker: 'patient', text: '¡Se acabó!, pensaba que me que me iba tomar de 6 a 7 rounds.' },
+                    { speaker: 'patient', text: '¡Se acabó! Pensaba que me iba a tomar de 6 a 7 rounds.' },
                     { speaker: 'dr', text: '¿Eso crees? El servicio al cliente te está llamando.' },
                     { speaker: 'nemesis', text: 'Jajaja... No puedes borrarme con puños. ¡SOY TU PROPIA CULPA!' },
                     { speaker: 'dr', text: '¡Hey! No estudiaste para terminar ahí, puedes vencerlo.' },
@@ -407,15 +432,24 @@ export class CombatScene extends Phaser.Scene {
                 this.cameras.main.once('camerafadeoutcomplete', () => {
                     this.scene.start('DialogueScene', {
                         lines: lineasResurreccion,
+                        mostrarMenuCoach: false, // Aquí no hay menú, directo a pelear
                         nextScene: 'CombatScene',
+                        
+                        // Pasamos las vidas para el HUD superior
+                        playerHp: this.paciente.hp,
+                        playerMaxHp: this.paciente.maxHp,
+                        nemesisHp: this.nemesis.hp,
+                        nemesisMaxHp: this.nemesis.maxHp,
+
                         nextData: {
                             currentRound: 3,
-                            nemesisRevived: true, 
+                            nemesisRevived: true, // Forzamos flag de resurrección para el reenganche
                             savedPatientHp: this.paciente.hp
                         }
                     });
                 });
             } else {
+                // Flujo D: Segundo noqueo del Round 3 -> Redención y Victoria Final
                 this.paciente.state = 'CINEMATIC';
                 
                 const lineasVictoriaFinal = [
@@ -428,7 +462,15 @@ export class CombatScene extends Phaser.Scene {
                 this.cameras.main.once('camerafadeoutcomplete', () => {
                     this.scene.start('DialogueScene', {
                         lines: lineasVictoriaFinal,
+                        mostrarMenuCoach: false,
                         nextScene: 'EndScene',
+                        
+                        // Pasamos las vidas (La hamburguesa tendrá 0HP aquí)
+                        playerHp: this.paciente.hp,
+                        playerMaxHp: this.paciente.maxHp,
+                        nemesisHp: this.nemesis.hp,
+                        nemesisMaxHp: this.nemesis.maxHp,
+
                         nextData: { victoria: true }
                     });
                 });
