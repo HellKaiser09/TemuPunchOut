@@ -25,7 +25,8 @@ Recupera las variables de persistencia entre asaltos (round actual, vida del jug
 
 /* ---------------------------------------------
 ¿Qué hace?
-Construye los elementos del ring de boxeo: instancia los personajes lógicos, asocia sus sprites gráficos, inicializa el HUD redondeado y configura los eventos de transición.
+Construye los elementos del ring de boxeo: instancia los personajes lógicos, asocia sus sprites gráficos,
+inicializa el HUD redondeado y configura los eventos de transición.
 ------------------------------------------- */
     create() {
         const W = this.scale.width;
@@ -129,10 +130,50 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
             });
         }
 
+        // ── Animaciones exclusivas de némesis revivido ────────
+        // Solo se registran una vez; se activan en procesarGolpeJugador
+        // como feedback visual de RECIBIR daño, no como ataque.
+        // Reemplazan la reacción de golpe normal cuando nemesisRevived === true.
+        if (!this.anims.exists('golpe_final_derecho')) {
+            this.anims.create({
+                key: 'golpe_final_derecho',
+                frames: [
+                    { key: 'final1' },
+                    { key: 'final2' },
+                ],
+                frameRate: 14, repeat: 0
+            });
+        }
+
+        if (!this.anims.exists('golpe_final_izquierdo')) {
+            this.anims.create({
+                key: 'golpe_final_izquierdo',
+                frames: [
+                    { key: 'final3' },
+                    { key: 'final4' },
+                ],
+                frameRate: 14, repeat: 0
+            });
+        }
+
+        if (!this.anims.exists('golpe_final_arriba')) {
+            this.anims.create({
+                key: 'golpe_final_arriba',
+                frames: [
+                    { key: 'final5' },
+                    { key: 'final6' },
+                ],
+                frameRate: 14, repeat: 0
+            });
+        }
+
         // ── Entidades ─────────────────────────────────────────
         this.nemesis  = new Nemesis(this, W / 2, H / 2 - 50);
         this.paciente = new Paciente(this, W / 2, H - 120);
         this.paciente.hp = this.savedPatientHp;
+
+        // Las entidades lógicas se mantienen invisibles;
+        // el renderizado lo hacen los sprites enemigo / jugador.
         this.nemesis.setVisible(false);
         this.paciente.setVisible(false);
 
@@ -142,9 +183,18 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
         this.enemigo.play('enemigo_idle');
 
         this.enemigo.on('animationcomplete', (anim) => {
-            if (anim.key === 'enemigo_batazo_izq' ||
-                anim.key === 'enemigo_batazo_der'  ||
-                anim.key === 'enemigo_batazo_arriba') {
+            // Al terminar cualquier animación de reacción a daño vuelve a idle.
+            // Incluye las animaciones "final_*" que ahora son feedback de daño
+            // en el round del némesis revivido.
+            const animsDeReaccion = [
+                'enemigo_batazo_izq',
+                'enemigo_batazo_der',
+                'enemigo_batazo_arriba',
+                'golpe_final_derecho',
+                'golpe_final_izquierdo',
+                'golpe_final_arriba',
+            ];
+            if (animsDeReaccion.includes(anim.key)) {
                 this.enemigo.play('enemigo_idle');
             }
         });
@@ -155,11 +205,13 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
         this.lastPacienteState = this.paciente.state;
 
         // ── Eventos del nemesis ───────────────────────────────
+        // 'nemesis-atacar' → solo dispara las animaciones de ATAQUE del enemigo.
+        // Las animaciones "final_*" ya NO se usan aquí; pertenecen al feedback de daño.
         this.events.on('nemesis-atacar', (direccion) => {
-            if (direccion === 'IZQUIERDA')      this.enemigo.play('enemigo_batazo_izq',    true);
-            else if (direccion === 'DERECHA')   this.enemigo.play('enemigo_batazo_der',    true);
-            else if (direccion === 'ARRIBA')    this.enemigo.play('enemigo_batazo_arriba', true);
-            else if (direccion === 'ESPECIAL')  this.enemigo.play('enemigo_especial',      true);
+            if (direccion === 'IZQUIERDA')     this.enemigo.play('enemigo_batazo_izq',    true);
+            else if (direccion === 'DERECHA')  this.enemigo.play('enemigo_batazo_der',    true);
+            else if (direccion === 'ARRIBA')   this.enemigo.play('enemigo_batazo_arriba', true);
+            else if (direccion === 'ESPECIAL') this.enemigo.play('enemigo_especial',       true);
         });
 
         this.events.on('nemesis-fin-recovery', () => {
@@ -310,6 +362,9 @@ Procesa los golpes del jugador contra el némesis. Si el némesis está en anima
 compatible con el tipo de golpe, lo bloquea; de lo contrario aplica daño normal.
 - enemigo_bloqueoarriba bloquea golpes ALTO_IZQ y ALTO_DER.
 - enemigo_bloqueoabajo  bloquea golpes BAJO_IZQ y BAJO_DER.
+Cuando nemesisRevived === true, la reacción visual de recibir daño usa las
+animaciones "golpe_final_*" en lugar de setTexture directo, para dar mayor
+feedback dramático de que el jefe está siendo golpeado.
 ------------------------------------------- */
     procesarGolpeJugador(tipo) {
         // ── Comprobación de bloqueo direccional del némesis ───
@@ -365,11 +420,29 @@ compatible con el tipo de golpe, lo bloquea; de lo contrario aplica daño normal
 
             this.nemesis.hp -= damageCalculado;
 
-            const esIzq = tipo.includes('IZQ');
-            this.enemigo.setTexture(esIzq ? 'hamburguesa_golpe_izq_1' : 'hamburguesa_golpe_der_1');
-            this.time.delayedCall(250, () => {
-                if (this.enemigo?.active) this.enemigo.play('enemigo_idle', true);
-            });
+            // ── Feedback visual de daño recibido ──────────────
+            // Round normal: setTexture directo para reacción rápida.
+            // Némesis revivido: animaciones "golpe_final_*" más dramáticas
+            // que representan que el jefe está siendo golpeado/dañado.
+            if (this.nemesisRevived) {
+                const esIzq   = tipo.includes('IZQ');
+                const esArriba = tipo.includes('ALTO');
+
+                if (esArriba) {
+                    this.enemigo.play('golpe_final_arriba', true);
+                } else if (esIzq) {
+                    this.enemigo.play('golpe_final_izquierdo', true);
+                } else {
+                    this.enemigo.play('golpe_final_derecho', true);
+                }
+                // La vuelta a idle la gestiona el listener 'animationcomplete'.
+            } else {
+                const esIzq = tipo.includes('IZQ');
+                this.enemigo.setTexture(esIzq ? 'hamburguesa_golpe_izq_1' : 'hamburguesa_golpe_der_1');
+                this.time.delayedCall(250, () => {
+                    if (this.enemigo?.active) this.enemigo.play('enemigo_idle', true);
+                });
+            }
 
             this.audioSystem?.playGolpePaciente();
 
@@ -413,6 +486,11 @@ Ejecuta la animación y reducción masiva de salud por el Súper Golpe de Espaci
         this.cameras.main.shake(500, 0.03);
 
         this.nemesis.hp -= 50;
+
+        // Feedback de super-golpe: siempre usa la animación más dramática disponible.
+        if (this.nemesisRevived) {
+            this.enemigo.play('golpe_final_arriba', true);
+        }
 
         this.tweens.add({
             targets: this.paciente, y: this.paciente.baseY - 80, scaleX: 1.3, duration: 200, yoyo: true,
@@ -586,13 +664,15 @@ Intercambia dinámicamente las texturas de renderizado del avatar del jugador.
         if (estado === 'ATACANDO' && this.paciente.lastPunchType) {
             const punchMap = {
                 'ALTO_IZQ': 'paciente_arriba_izq', 'ALTO_DER': 'paciente_arriba_der',
-                'BAJO_IZQ': 'paciente_abajo_izq', 'BAJO_DER': 'paciente_abajo_der',
+                'BAJO_IZQ': 'paciente_abajo_izq',  'BAJO_DER': 'paciente_abajo_der',
             };
             this.jugador.setTexture(punchMap[this.paciente.lastPunchType] || 'paciente_iddle');
         } else {
             const texturaMap = {
-                'NEUTRAL': 'paciente_iddle', 'ESQUIVE_IZQ': 'paciente_esquive_izq', 'ESQUIVE_DER': 'paciente_esquive_der',
-                'AGACHADO': 'paciente_iddle', 'BLOQUEANDO': 'paciente_iddle', 'RECOVERY': 'paciente_iddle', 'CINEMATIC': 'paciente_iddle'
+                'NEUTRAL':     'paciente_iddle',       'ESQUIVE_IZQ': 'paciente_esquive_izq',
+                'ESQUIVE_DER': 'paciente_esquive_der', 'AGACHADO':    'paciente_iddle',
+                'BLOQUEANDO':  'paciente_iddle',       'RECOVERY':    'paciente_iddle',
+                'CINEMATIC':   'paciente_iddle'
             };
             this.jugador.setTexture(texturaMap[estado] || 'paciente_iddle');
         }
