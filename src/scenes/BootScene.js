@@ -32,20 +32,7 @@ export class BootScene extends Phaser.Scene {
         this.load.image('coach_eleccion',      'src/assets/sprites/coach_eleccion.png');
         this.load.image('fondo_pelea',         'src/assets/sprites/Frame_8.png');
 
-preload() {
-    this.load.spritesheet('paciente_idle', 'src/assets/sprites/diseño.png', {
-    frameWidth: 932, // 👈 Calcula el ancho real de UN SOLO dibujo (Ancho total / cantidad de caras)
-    frameHeight: 475 // 👈 El alto real de la imagen
-});
-    this.load.image('bg_menu', "src/assets/sprites/Frame_4.png");
-    this.load.image('bg_menu_tutorial', "src/assets/sprites/Frame_6.png")
-    this.load.image('coach_character_menu', "src/assets/sprites/Mesa_de_trabajo_6_1.png")
-    this.load.image('coach_eleccion', "src/assets/sprites/coach_eleccion.png")
-    this.load.image('fondo_pelea', "src/assets/sprites/Frame_8.png")
-    this.load.spritesheet('hamburguesa_golpe_izq', 'src/assets/sprites/spritesheet (2).png', {
-    frameWidth: 850, // 🔥 El ancho exacto de un cuadro para 3 frames
-    frameHeight: 851  // 🔥 El alto exacto de tu archivo
-});
+
         this.load.image('hamburguesa_golpe_izq_1', 'src/assets/sprites/izquierda1.png');
         this.load.image('hamburguesa_golpe_izq_2', 'src/assets/sprites/izquierda2.png');
         this.load.image('hamburguesa_golpe_izq_3', 'src/assets/sprites/izquierda3.png');
@@ -75,6 +62,29 @@ preload() {
     }
 
     create() {
+        // Registrar animaciones globales una sola vez al iniciar el juego
+        this.anims.create({
+            key: 'enemigo_batazo_izq',
+            frames: [
+                { key: 'hamburguesa_golpe_izq_1' },
+                { key: 'hamburguesa_golpe_izq_2' },
+                { key: 'hamburguesa_golpe_izq_3' },
+            ],
+            frameRate: 12,
+            repeat: 0
+        });
+
+        this.anims.create({
+            key: 'enemigo_batazo_der',
+            frames: [
+                { key: 'hamburguesa_golpe_der_1' },
+                { key: 'hamburguesa_golpe_der_2' },
+                { key: 'hamburguesa_golpe_der_3' },
+            ],
+            frameRate: 12,
+            repeat: 0
+        });
+
         this.scene.start('MenuScene');
     }
 }

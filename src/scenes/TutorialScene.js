@@ -1,174 +1,120 @@
 // src/scenes/TutorialScene.js
-// Pantalla de tutorial en dos columnas con el estilo minimalista de los créditos
+
 const FONT_TITULO = '"Bowlby One SC", sans-serif';
-const FONT_DATOS = 'monospace';
-const FONT_DESC = 'sans-serif';
+const FONT_DATOS  = 'monospace';
+const FONT_DESC   = 'sans-serif';
+
 export class TutorialScene extends Phaser.Scene {
+/* ---------------------------------------------
+¿Qué hace?
+Registra la escena en el núcleo del motor bajo la clave 'TutorialScene'.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+La clave de acceso en texto si decides renombrarla.
+
+¿Qué controla?
+La inicialización básica del objeto escena.
+
+Importancia
+BAJA. Requisito estructural de Phaser.
+------------------------------------------- */
     constructor() {
         super({ key: 'TutorialScene' });
     }
 
 /* ---------------------------------------------
 ¿Qué hace?
-Configura y dibuja toda la interfaz del tutorial. Pinta el fondo oscuro, el título gigante, calcula las posiciones de las dos columnas de texto y dibuja el botón interactivo para volver al menú principal, todo con una animación de entrada fluida.
+Dibuja el fondo, crea el contenedor cinematográfico negro y azul del SISTEMA, inicializa los textos parpadeantes de interactividad, define el guion introductorio del juego y activa los escuchadores para avanzar el texto.
 
 ¿Qué podemos cambiar osea tamaños, espaciados, etc?
-- La opacidad del fondo (`0.9`).
-- La separación entre columnas (`columnGap = 140`) y el ancho de cada una (`columnWidth = 400`).
-- Las alturas de los renglones (`Y_ROW_1 = 490`, etc.).
-- La posición del título (`290`) y del botón de volver (`H - 160`).
+- El tamaño de la caja del sistema (`W * 0.7`, `280` de alto).
+- Los colores del recuadro (`0x0d0d1a` para el fondo, `0x4a9eff` para el borde azul).
+- Las tipografías, tamaños (`28px`, `22px`) y el interlineado (`lineSpacing: 8`).
+- La velocidad del parpadeo del prompt (`duration: 600`).
 
 ¿Qué controla?
-La visualización principal de la pantalla de ayuda y el ruteo de regreso al `MenuScene`.
+La maquetación visual de la introducción de texto y el arranque del hilo narrativo.
 
 Importancia
-MEDIA. Es esencial para que el jugador entienda las mecánicas, pero no afecta la lógica interna del combate.
+CRÍTICA. Es el constructor principal de la escena cinemática.
 ------------------------------------------- */
     create() {
         const W = this.scale.width;
         const H = this.scale.height;
 
-        // 1. Fondo oscuro de aislamiento
-        if (this.textures.exists('bg_menu_tutorial')) {
-            const fondo = this.add.image(W / 2, H / 2, 'bg_menu_tutorial');
-            fondo.setDisplaySize(W, H);
-            fondo.setAlpha(0.9); 
+        // 1. Fondo de la pelea de respaldo
+        if (this.textures.exists('fondo_pelea')) {
+            this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H);
         } else {
             this.add.rectangle(W / 2, H / 2, W, H, 0x0d0d1a);
         }
 
-        // Contenedor para la animación de entrada
-        const contenedor = this.add.container(0, 0);
-
-        // 2. Título principal centrado
-        const titulo = this.add.text(W / 2.01, 290, '¿CÓMO JUGAR?', {
-            fontFamily: FONT_TITULO,
-            fontSize: '100px',
-            color: '#ffffff',
-            letterSpacing: 4
-        }).setOrigin(0.5);
-
-        // ── CONTENEDORES DE INFORMACIÓN ──
-        const columnWidth = 400;
-        const columnGap = 140;
-        const totalColumnsWidth = (columnWidth * 2) + columnGap;
-        const columnsStartX = (W - totalColumnsWidth) / 2;
-        // Fondo del ring (mismo que el combate)
-        this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H);
-
         this.cameras.main.fadeIn(400);
 
-        const tutorialLines = [
-            { speaker: 'system', text: 'Estás dentro de tu propio miedo.' },
-            { speaker: 'system', text: 'No te preocupes. Es solo un sueño.' },
-            { speaker: 'system', text: '(Más o menos.)' },
-            { speaker: 'system', text: '[Q] Golpe bajo izq.   [W] Golpe alto izq.\n[E] Golpe bajo der.   [R] Golpe alto der.' },
-            { speaker: 'system', text: '[←] [→] Esquivar a los lados\n[↓]  Agacharse (mantén presionado)' },
-            { speaker: 'system', text: 'Tu oponente representa algo que te ha estado quitando el sueño.' },
-            { speaker: 'system', text: 'Aunque literalmente tiene forma de combo #3.' },
-        ];
-
-        // Caja de diálogo estilo sistema
+        // ── CAJA DE DIÁLOGO SISTEMA CENTRALIZADA ──
         this.add.rectangle(W / 2, H / 2, W * 0.7, 280, 0x0d0d1a, 0.96)
             .setStrokeStyle(2, 0x4a9eff);
 
+        // Etiqueta del emisor
         this.sysLabel = this.add.text(W / 2, H / 2 - 100, '◈ SISTEMA', {
-            fontFamily: 'monospace',
-            fontSize: '22px', color: '#4a9eff',
-            letterSpacing: 3,
+            fontFamily: FONT_DATOS, fontSize: '22px', color: '#4a9eff', letterSpacing: 3,
         }).setOrigin(0.5);
 
+        // Texto principal dinámico (Donde cae el tipeo)
         this.sysText = this.add.text(W / 2, H / 2 - 30, '', {
-            fontFamily: 'monospace',
-            fontSize: '28px', color: '#a0c8ff',
-            align: 'center',
-            wordWrap: { width: W * 0.62 },
-            lineSpacing: 8,
+            fontFamily: FONT_DATOS, fontSize: '28px', color: '#a0c8ff', align: 'center',
+            wordWrap: { width: W * 0.62 }, lineSpacing: 8,
         }).setOrigin(0.5, 0);
 
-        this.prompt = this.add.text(W / 2, H / 2 + 110, '[ PRESIONA CUALQUIER TECLA ]', {
-            fontFamily: 'monospace',
-            fontSize: '20px', color: '#4a9eff',
+        // Indicador de acción parpadeante
+        this.prompt = this.add.text(W / 2, H / 2 + 110, '[ PRESIONA CUALQUIER TECLA O DA CLICK ]', {
+            fontFamily: FONT_DATOS, fontSize: '20px', color: '#4a9eff',
         }).setOrigin(0.5);
 
-        const Y_START_HEADERS = 400; 
-        const Y_ROW_1         = 490;
-        const Y_ROW_2         = 650; 
-        const Y_ROW_3         = 795;
-
-        // 🛡️ SECCIÓN A: DEFENSA Y MOVIMIENTO (Columna Izquierda)
-        this._drawSectionHeader(contenedor, colIzquierdaX, Y_START_HEADERS, 'MOVIMIENTO Y DEFENSA');
-        
-        const controlesIzquierda = [
-            { teclas: '◀ / ▶', accion: 'ESQUIVAR LATERAL', desc: 'Evita ganchos moviéndote al lado opuesto.' },
-            { teclas: '▼ (ABAJO)', accion: 'AGACHADO (DUCK)', desc: 'Pasa por debajo de golpes altos u obstáculos.' },
-            { teclas: '▲ (ARRIBA)', accion: 'GUARDIA FIRME', desc: 'Mitiga el impacto directo (Chip Damage).' }
-        ];
-
-        // Se dibujan automáticamente con la matemática de separación (+150px por fila)
-        controlesIzquierda.forEach((ctrl, i) => {
-            const yOffset = Y_START_HEADERS + 90 + (i * 150);
-            this._drawControlRow(contenedor, colIzquierdaX, yOffset, ctrl.teclas, ctrl.accion, ctrl.desc);
-        });
-
-        // 🥊 SECCIÓN B: ATAQUES Y CONTROL (Columna Derecha)
-        this._drawSectionHeader(contenedor, colDerechaX, Y_START_HEADERS, 'COMBATE Y CONSEJOS');
-        const controlesDerecha =[
-            {teclas: 'W / R', accion: 'GOLPE ALTO (IZQ / DER)', desc: 'Ataque rápido a la cabeza del Némesis.'},
-            {teclas: 'Q/ E', accion: 'GOLPE BAJO (IZQ / DER)', desc: 'Gancho pesado al cuerpo del rival.'},
-        ];
-
-        controlesDerecha.forEach((ctrl, i) => {
-            const yOffset = Y_START_HEADERS + 90 + (i * 150);
-            this._drawControlRow(contenedor, colDerechaX, yOffset, ctrl.teclas, ctrl.accion, ctrl.desc);
-        });
-        
-        // Súper Golpe resaltado en Cyan
-        this._drawControlRow(contenedor, colDerechaX, Y_ROW_3, 'TECLA: ESPACIO', '¡SÚPER GOLPE CRÍTICO!', 'Requiere 100% de energía. Daño masivo de 50 HP.', '#00ffff');
-
-        // 4. Botón de Retorno inferior
-        const btnVolver = this.add.text(W / 2, H - 160, '← VOLVER AL MENÚ', {
-            fontFamily: FONT_TITULO,
-            fontSize: '38px',
-            color: '#ffffff',
-            stroke: '#000000',
-            strokeThickness: 6
-        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-        contenedor.add([titulo, btnVolver]);
-
-        // Lógica de salida
-        btnVolver.on('pointerdown', () => {
-            this.cameras.main.fade(250, 0, 0, 0);
-            this.cameras.main.once('camerafadeoutcomplete', () => {
-                this.scene.start('MenuScene');
-            });
-        });
-
-        btnVolver.on('pointerover', () => btnVolver.setColor('#ffd700'));
-        btnVolver.on('pointerout', () => btnVolver.setColor('#ffffff'));
-
-        // Entrada animada
-        contenedor.setAlpha(0).setY(25);
         this.tweens.add({
-            targets: this.prompt, alpha: 0,
-            duration: 600, yoyo: true, repeat: -1,
+            targets: this.prompt, alpha: 0, duration: 600, yoyo: true, repeat: -1,
         });
 
-        // Estado
-        this.lines    = tutorialLines;
+        // ── ESTADO DE LAS LÍNEAS NARRATIVAS / CONTROLES ──
+// ── ESTADO DE LAS LÍNEAS NARRATIVAS / CONTROLES ──
+        this.lines = [
+            { text: 'Estás dentro de tu propio miedo.' },
+            { text: 'No te preocupes. Es solo un sueño.' },
+            { text: '(Más o menos.)' },
+            // Usamos \n para saltar de renglón y espaciados para tabular los botones
+            { text: 'Moverse requiere usar tus reflejos básicos:\n[Q] Golpe bajo izq.   [W] Golpe alto izq.\n[E] Golpe bajo der.   [R] Golpe alto der.' },
+            { text: 'Para proteger tu mente:\n[←] [→] Esquivar a los lados\n[↓]  Agacharse (mantén presionado)' },
+            { text: 'Tu oponente representa algo que te ha estado quitando el sueño.' },
+            { text: 'Aunque literalmente tiene forma de combo #3.' },
+        ];
+        
         this.index    = 0;
         this.typing   = false;
         this.fullText = '';
         this.charIdx  = 0;
         this.typTimer = null;
 
+        // Arrancamos el primer renglón
         this._showLine(0);
 
+        // Entrada de teclado y mouse unificada
         this.input.keyboard.on('keydown', this._onAdvance, this);
         this.input.on('pointerdown', this._onAdvance, this);
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Borra el texto anterior y arranca un reloj interno (Timer) que imprime letra por letra del nuevo renglón cada 30 milisegundos para simular una terminal de computadora. Si se acaban las líneas, salta al combate.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+La velocidad del tipeo de las letras cambiando el `delay: 30` (más chico es más veloz).
+
+¿Qué controla?
+El avance del guion indexado y el estado lógico de escritura (`this.typing`).
+
+Importancia
+ALTA. Controla la animación automatizada del texto.
+------------------------------------------- */
     _showLine(i) {
         if (i >= this.lines.length) {
             this._irACombate();
@@ -194,59 +140,17 @@ MEDIA. Es esencial para que el jugador entienda las mecánicas, pero no afecta l
 
 /* ---------------------------------------------
 ¿Qué hace?
-Dibuja el título secundario de una columna ("MOVIMIENTO Y DEFENSA") y le coloca una línea divisoria debajo para darle estilo. Lo añade al contenedor principal para que se anime junto con el resto.
+Gestiona el clic o la tecla del usuario. Si el texto se está escribiendo, detiene el efecto y planta el enunciado completo de inmediato. Si el texto ya terminó de escribirse, ordena avanzar a la siguiente línea.
 
 ¿Qué podemos cambiar osea tamaños, espaciados, etc?
-- El tamaño y espaciado de fuente (`24px`, `letterSpacing: 2`).
-- El color de la línea divisoria (`0x0f3460`) y su grosor (`2`).
-- El espacio entre el texto y la línea (`y + 35`).
+Nada estético, es pura regla lógica de interrupción.
 
 ¿Qué controla?
-La separación visual y el orden jerárquico de la información en pantalla.
+La fluidez de lectura del usuario impaciente.
 
 Importancia
-BAJA. Es un elemento puramente estético y de maquetación (Layout).
+ALTA. Previene que el jugador tenga que esperar el tipeo si lee rápido.
 ------------------------------------------- */
-    _drawSectionHeader(contenedor, x, y, title) {
-        const headerTxt = this.add.text(x, y, title, {
-            fontFamily: FONT_DATOS, fontSize: '24px', fontStyle: 'bold', color: '#7ed7ff', letterSpacing: 2 
-        });
-        
-        const linea = this.add.rectangle(x, y + 35, 400, 2, 0x0f3460).setOrigin(0);
-        contenedor.add([headerTxt, linea]);
-    }
-
-/* ---------------------------------------------
-¿Qué hace?
-Genera un bloque de texto de tres renglones: 1) Las teclas requeridas, 2) El nombre de la acción (en grande), y 3) La descripción detallada. Lo agrega al contenedor principal.
-
-¿Qué podemos cambiar osea tamaños, espaciados, etc?
-- El margen vertical entre textos (`y + 28`, `y + 76`).
-- El tamaño de las fuentes (`18px`, `36px`, `16px`).
-- El ancho máximo antes de que el texto de descripción salte a la siguiente línea (`wordWrap: { width: 400 }`).
-- El color por defecto del título de acción (`#ffffff`).
-
-¿Qué controla?
-El formato estándar en el que se le enseñan los controles al jugador.
-
-Importancia
-MEDIA. Agiliza muchísimo el código principal al evitar repetir bloques de texto enormes.
-------------------------------------------- */
-    _drawControlRow(contenedor, x, y, teclas, accion, desc, colorAccion = '#ffffff') {
-        const teclasTxt = this.add.text(x, y, teclas, {
-            fontFamily: FONT_DATOS, fontSize: '18px', fontWeight: 'bold', color: '#8a8a9a', letterSpacing: 2
-        });
-
-        const accionTxt = this.add.text(x, y + 28, accion, {
-            fontFamily: FONT_TITULO, fontSize: '36px', color: colorAccion,
-        });
-
-        const descTxt = this.add.text(x, y + 76, desc, {
-            fontFamily: FONT_DESC, fontSize: '16px', color: '#71717a', wordWrap: { width: 400 }, letterSpacing: 1
-        });
-
-        contenedor.add([teclasTxt, accionTxt, descTxt]);
-    }
     _onAdvance() {
         if (this.typing) {
             if (this.typTimer) this.typTimer.remove();
@@ -257,20 +161,26 @@ MEDIA. Agiliza muchísimo el código principal al evitar repetir bloques de text
         this._showLine(this.index + 1);
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Limpia los escuchadores de teclado y mouse de la escena para que no se queden duplicados en memoria, ejecuta un fade out negro y arranca el ring de boxeo.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+La velocidad de salida de la pantalla (`500` ms).
+
+¿Qué controla?
+La transición segura y el desembarco en la escena de pelea.
+
+Importancia
+CRÍTICA. Es la válvula de escape que inicia el juego real.
+------------------------------------------- */
     _irACombate() {
-    this.cameras.main.fade(500, 0, 0, 0);
-    this.cameras.main.once('camerafadeoutcomplete', () => {
-        // Primero inicia CombatScene
-        this.scene.start('CombatScene');
-        
-        // Espera un frame para que CombatScene termine su create()
-        // y luego emite show-enemy
-        // Si viene del tutorial, muestra los sprites después de un momento
-this.time.delayedCall(300, () => {
-    this.enemigo.setVisible(true);
-    this.jugador.setVisible(true);
-});
-    
-    });
-}
+        this.input.keyboard.off('keydown', this._onAdvance, this);
+        this.input.off('pointerdown', this._onAdvance, this);
+
+        this.cameras.main.fade(500, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+            this.scene.start('CombatScene');
+        });
+    }
 }

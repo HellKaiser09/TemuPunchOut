@@ -3,17 +3,60 @@ import { Nemesis } from '../entities/Nemesis.js';
 import { BuffSystem } from '../systems/BuffSystem.js';
 
 export class CombatScene extends Phaser.Scene {
+/* ---------------------------------------------
+¿Qué hace?
+Registra formalmente la escena de pelea en el núcleo del motor Phaser bajo el identificador único 'CombatScene'.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+La clave string de acceso interno (`key`).
+
+¿Qué controla?
+La declaración del archivo dentro del config global.
+
+Importancia
+BAJA. Firma estructural requerida por Phaser.
+------------------------------------------- */
     constructor() {
         super({ key: 'CombatScene' });
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Recupera y empaqueta las variables de persistencia cuando la escena se reinicia o se cambia desde un diálogo (round actual, vida previa del jugador, si el enemigo ya mutó y mejoras por aplicar).
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+Los valores de respaldo por defecto (ej. iniciar la partida con menos vida base cambiando el `?? 150`).
+
+¿Qué controla?
+La memoria lógica transicional entre asaltos.
+
+Importancia
+ALTA. Si se rompe, el juego olvidará en qué round iba el jugador.
+------------------------------------------- */
     init(data) {
-        this.currentRound   = data?.currentRound  ?? 1;
+        this.currentRound   = data?.currentRound   ?? 1;
         this.nemesisRevived = data?.nemesisRevived ?? false;
         this.savedPatientHp = data?.savedPatientHp ?? 150;
         this.pendingBuff    = data?.pendingBuff    ?? null;
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Arma todo el campo de batalla: instancia los objetos invisibles de lógica (`Paciente` y `Nemesis`), fabrica los sprites visuales animados, inyecta el sistema de mejoras, inicializa las barras de vida/súper y lee las directrices del registro global para aplicar habilidades especiales.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+- Escalas de los personajes (`setScale(0.70)`, `setScale(0.60)`).
+- Profundidad de renderizado de capas (`setDepth(10)`).
+- Medidas y coordenadas de la UI de vida (anchos de 250, posiciones X, Y).
+- Configuración del Nerf/Buff del jefe final en modo furia (`this.nemesis.hp = 60`).
+- Estilos de tipografías y colores de las alertas rojas o texto cyan del Súper.
+
+¿Qué controla?
+El renderizado inicial absoluto de los componentes del ring y el mapeo de animaciones en la lona.
+
+Importancia
+CRÍTICA. Es el constructor visual completo de la pelea.
+------------------------------------------- */
     create() {
         const W = this.scale.width;
         const H = this.scale.height;
@@ -21,31 +64,7 @@ export class CombatScene extends Phaser.Scene {
         this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H);
         this.cameras.main.fadeIn(500, 0, 0, 0);
 
-        if (!this.anims.exists('enemigo_batazo_izq')) {
-            this.anims.create({
-                key: 'enemigo_batazo_izq',
-                frames: [
-                    { key: 'hamburguesa_golpe_izq_1' },
-                    { key: 'hamburguesa_golpe_izq_2' },
-                    { key: 'hamburguesa_golpe_izq_3' },
-                ],
-                frameRate: 12,
-                repeat: 0
-            });
-        }
-
-        if (!this.anims.exists('enemigo_batazo_der')) {
-            this.anims.create({
-                key: 'enemigo_batazo_der',
-                frames: [
-                    { key: 'hamburguesa_golpe_der_1' },
-                    { key: 'hamburguesa_golpe_der_2' },
-                    { key: 'hamburguesa_golpe_der_3' },
-                ],
-                frameRate: 12,
-                repeat: 0
-            });
-        }
+        // Animaciones del enemigo registradas en BootScene (se crean una vez al iniciar)
 
         this.nemesis  = new Nemesis(this, W / 2, H / 2 - 50);
         this.paciente = new Paciente(this, W / 2, H - 120);
@@ -76,15 +95,15 @@ export class CombatScene extends Phaser.Scene {
 
         this.buffSystem = new BuffSystem(this, this.paciente, this.nemesis);
 
-        this.events.off('coach-buff-chosen');
-        this.events.on('coach-buff-chosen', (buffId) => {
-            this.currentRound++;
-            this.scene.restart({
-                currentRound:   this.currentRound,
-                savedPatientHp: this.paciente.hp,
-                nemesisRevived: this.nemesisRevived,
-                pendingBuff:    buffId
-            });
+        // El listener 'coach-buff-chosen' se eliminó para evitar listeners acumulados.
+        // Ahora el flujo pasa por DialogueScene; cuando ésta termine emitirá
+        // 'dialogue-next-coach' y arrancaremos la escena de Coach de forma limpia.
+        this.events.off('dialogue-next-coach');
+        this.events.on('dialogue-next-coach', () => {
+            if (!this.pendingCoachData) return;
+            const data = this.pendingCoachData;
+            this.pendingCoachData = null;
+            this.scene.start('CoachScene', data);
         });
 
         this.add.text(50, 30, `Paciente (Round ${this.currentRound}):`, {
@@ -121,11 +140,7 @@ export class CombatScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         this.buffHintText = this.add.text(W / 2, H - 40, '', {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '26px',
-            color: '#ffd700',
-            fontStyle: 'italic',
-            align: 'center',
+            fontFamily: 'Arial, sans-serif', fontSize: '26px', color: '#ffd700', fontStyle: 'italic', align: 'center',
         }).setOrigin(0.5).setDepth(20);
 
         const registryPendingBuff = this.registry.get('pendingBuff');
@@ -141,6 +156,19 @@ export class CombatScene extends Phaser.Scene {
         this._refreshCombatUI();
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Corre síncronamente amarrando la posición del cuadro de físicas con la posición visual del Sprite. Detecta si el estado interno del Paciente mutó para ordenar de inmediato un cambio de pose en la textura del dibujo.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+Los desfases de renderizado (como el `this.nemesis.y + 60` para centrar verticalmente a la hamburguesa).
+
+¿Qué controla?
+La sincronización exacta de posiciones físicas/gráficas fotograma a fotograma y el refresco continuo de la UI.
+
+Importancia
+CRÍTICA. Es el motor de actualización recurrente de la escena.
+------------------------------------------- */
     update() {
         this.paciente.update();
 
@@ -162,6 +190,19 @@ export class CombatScene extends Phaser.Scene {
         this._refreshCombatUI();
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Consulta el catálogo lúdico-psicológico del juego para ver qué Buff seleccionó el usuario y escribe un recordatorio de apoyo emocional flotante abajo en el ring.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+Los textos, emojis y strings literales de los consejos de salud mental (`hints`).
+
+¿Qué controla?
+El despliegue de recordatorios informativos de las habilidades en la UI inferior.
+
+Importancia
+MEDIA. Aporta valor de feedback narrativo y refuerzo conceptual al proyecto.
+------------------------------------------- */
     _refreshCombatUI() {
         if (!this.buffSystem || !this.paciente || !this.nemesis) return;
         if (!this.buffHintText) return;
@@ -181,6 +222,22 @@ export class CombatScene extends Phaser.Scene {
         );
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Procesa matemáticamente los puñetazos QWER del jugador. Evalúa si el rival bloquea; si entra el golpe, calcula probabilidades de daño crítico, resta vida al Némesis, suma medidor de Súper, sacude la cámara (screenshake), genera un destello visual de impacto estirando el sprite del rival y revisa si el jefe murió.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+- Las probabilidades de bloqueo (`0.70` en ataque, `0.32` en neutral).
+- El daño base (`8` para bajos, `12` para altos).
+- La probabilidad de asestar crítico (`0.35`) y la fuerza de sacudida de la pantalla (`shake(80, 0.01)`).
+- La deformación del Sprite del enemigo al ser impactado (`scaleX: 1.6`, duración 50 ms).
+
+¿Qué controla?
+La resolución completa de las ofensivas físicas del jugador y las barras de interfaz enemigas.
+
+Importancia
+CRÍTICA. Es el núcleo reactivo de ataque del gameplay loop.
+------------------------------------------- */
     procesarGolpeJugador(tipo) {
         const bloqueandoPorVentana = this.nemesis.state === 'ATACANDO';
         const blockChance = bloqueandoPorVentana ? 0.70 : 0.32;
@@ -239,6 +296,21 @@ export class CombatScene extends Phaser.Scene {
         }
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Resuelve el poder especial de la barra de espacio. Tiñe al enemigo de cyan, flashea la pantalla entera, sacude violentamente la cámara, descuenta 50 HP fijos de vida al rival y desplaza verticalmente el cuerpo del Paciente simulando un golpe aplastante.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+- El daño del súper (`50` HP).
+- La intensidad del destello (`300, 0, 255, 255`) y de la vibración (`500, 0.03`).
+- La altura del brinco del Paciente (`this.paciente.baseY - 80`).
+
+¿Qué controla?
+La activación del ataque definitivo de recompensa del usuario.
+
+Importancia
+ALTA. Es la recompensa mecánica más poderosa del bucle de combate.
+------------------------------------------- */
     procesarSuperJugador() {
         this.enemigo.setTint(0x00ffff);
         this.cameras.main.flash(300, 0, 255, 255);
@@ -267,6 +339,22 @@ export class CombatScene extends Phaser.Scene {
         });
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Calcula la efectividad de la defensa del jugador frente a los ganchos de la IA. Si es el ataque especial, inflige daño directo continuo (ticks). Si es lateral o vertical, evalúa si la dirección de esquive del Paciente coincide de forma opuesta al golpe para decretar un esquive perfecto, una guardia mitigada (50% de daño) o un golpe limpio devastador.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+- El daño por defecto de la IA (`10`).
+- El daño residual de la guardia firme (`chipDamage = 2`).
+- El multiplicador por penalización de debilidad crítica (`dañoFinal * 1.25`).
+- Los tiempos de sacudidas de pantalla y flasheos rojos de daño directo.
+
+¿Qué controla?
+Los sistemas relacionales de impacto y mitigación de daño sufridos por el avatar del usuario.
+
+Importancia
+CRÍTICA. Es el árbitro matemático que decide si el jugador se protegió a tiempo.
+------------------------------------------- */
     procesarGolpeNemesis(data = {}) {
         if (this.paciente.hp <= 0) return;
 
@@ -335,12 +423,24 @@ export class CombatScene extends Phaser.Scene {
         });
     }
 
-// ── REGLAS DE ENRUTAMIENTO CINEMÁTICO Y NARRATIVO DEL RÉFERI ──
+/* ---------------------------------------------
+¿Qué hace?
+Clausura la pelea y gestiona el flujo de escenas. En derrota, te manda a fundido a negro directo a `EndScene`. En victoria parcial (Rounds 1 y 2), congela la IA y gatilla el intermedio de mejoras. En Round 3, despliega las novelas visuales cinemáticas del "Falso Final" o la victoria absoluta.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+- Tiempos de transiciones y cortinas negras (`500`, `800`, `1000` ms).
+- Los strings de los textos narrativos de los personajes del Round 3.
+
+¿Qué controla?
+El enrutamiento macro y el finiquito del bucle principal de combate.
+
+Importancia
+CRÍTICA. Es el timón de flujo del juego.
+------------------------------------------- */
     terminarCombate(victoria) {
         this.nemesis.attackTimer.destroy(); 
 
         if (!victoria) {
-            // Flujo A: Derrota absoluta -> Fundido a negro hacia la pantalla de KO
             this.cameras.main.fade(800, 0, 0, 0);
             this.cameras.main.once('camerafadeoutcomplete', () => {
                 this.scene.start('EndScene', { victoria: false });
@@ -348,18 +448,30 @@ export class CombatScene extends Phaser.Scene {
             return;
         }
 
-        // Flujo B: Victoria parcial -> Diálogo del Coach + Selección de Mejora (Rounds 1 y 2)
         if (this.currentRound === 1 || this.currentRound === 2) {
-            this.paciente.state = 'CINEMATIC'; 
-            this.buffSystem.tickRound(); 
+            this.paciente.state = 'CINEMATIC';
+            this.buffSystem.tickRound();
 
-            this.scene.launch('CoachScene', {
-                round: this.currentRound,
+            // Flujo redirigido: mostrar diálogo corto y luego abrir CoachScene
+            this.pendingCoachData = {
+                currentRound: this.currentRound + 1,
                 playerHp: this.paciente.hp,
                 playerMaxHp: this.paciente.maxHp,
                 playerEnergy: this.paciente.superMeter
-            });
+            };
 
+            const lineasIntermedio = [
+                { speaker: 'dr', text: 'Buen trabajo. Vamos a revisar tus opciones de mejora.' },
+                { speaker: 'patient', text: '¿Qué debo escoger, doctor?' }
+            ];
+
+            this.cameras.main.fade(500, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+                this.scene.start('DialogueScene', {
+                    lines: lineasIntermedio,
+                    onFinishEvent: 'dialogue-next-coach'
+                });
+            });
         } else if (this.currentRound === 3) {
             if (!this.nemesisRevived) {
                 const lineasResurreccion = [
@@ -401,6 +513,19 @@ export class CombatScene extends Phaser.Scene {
         }
     }
 
+/* ---------------------------------------------
+¿Qué hace?
+Funciona como el director de arte de poses del jugador. Lee el estado lógico de `Paciente.js` y, mediante diccionarios asociativos, intercambia en caliente la textura de la imagen en pantalla para renderizar esquives o impactos específicos.
+
+¿Qué podemos cambiar osea tamaños, espaciados, etc?
+Los nombres de las claves de los assets cargados en memoria (ej. 'paciente_esquive_izq').
+
+¿Qué controla?
+La concordancia visual del avatar con las acciones del teclado del jugador.
+
+Importancia
+ALTA. Es el proveedor directo de feedback de posicionamiento en el ring.
+------------------------------------------- */
     _updateJugadorTextura(estado) {
         if (!this.jugador) return;
 
