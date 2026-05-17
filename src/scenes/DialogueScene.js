@@ -117,7 +117,7 @@ CRÍTICA. Dibuja el escenario interactivo donde el jugador leerá la historia.
 
         // ── Caja de diálogo MODIFICADA ──
         const boxH = 220;
-        const boxY = H - boxH / 2 - 10;
+        const boxY = H - boxH / 2 - 30;
 
         // 🔥 DEFINIR NUEVO ANCHO Y POSICIÓN
         const boxW = W - 350;
@@ -217,13 +217,14 @@ ALTA. Evita que todos los personajes se vean iguales; les da identidad visual y 
             } else {
                 this.portraitImg.setFrame(0); // Cara por defecto si no se especifica
             }
+            this.portraitImg.setAngle(10);
 
             // Corregimos el anclaje: ponemos el origen abajo (0.5, 1) para que no se corten los pies
             this.portraitImg.setOrigin(0.6, 0.89);
-            this.portraitImg.setY(H - 15); // Alineado perfectamente al ras inferior
+            this.portraitImg.setY(H - 10); // Alineado perfectamente al ras inferior
             
             // Si habla el doctor a la derecha, lo metemos más al centro del encuadre
-            this.portraitImg.setX(cfg.side === 'right' ? W - 180 : 180);
+            this.portraitImg.setX(cfg.side === 'right' ? W - 240: 180);
             this.portraitImg.setScale(cfg.side === 'right' ? 0.55 : 0.45); // Escala personalizada por lado
         } else {
             // Regresa estricta: Si habla el sistema o no hay foto, se oculta por completo
@@ -238,12 +239,12 @@ ALTA. Evita que todos los personajes se vean iguales; les da identidad visual y 
 
         // Separación vertical de seguridad (Evita el bug de encimado de image_0d1625.png)
         this.speakerText.setY(boxY - 75); // Nombre arriba
-        this.bodyText.setY(boxY - 15);    // Mensaje abajo (60px de colchón limpio)
+        this.bodyText.setY(boxY - 15);    // Mensaje a  bajo (60px de colchón limpio)
 
         // 3. 🗺️ MARGENES DINÁMICOS (Word-Wrap adaptado a la caja chica)
         // Usamos las variables que guardamos en el create()
         let textX = this.currentBoxX + 40;
-        let maxTextWidth = this.currentBoxW - 80;
+        let maxTextWidth = this.currentBoxW - 250;
 
         // Si el personaje está a la izquierda (como el paciente), empujamos el texto un poco más
         if (cfg.portrait && line.speaker !== 'system' && cfg.side === 'left') {
@@ -414,25 +415,26 @@ Importancia
 CRÍTICA. Es la compuerta de escape que devuelve el control al loop principal del juego.
 ------------------------------------------- */
 _finish() {
-        // Desconectamos los escuchadores globales para sanar la memoria RAM
-        this.input.keyboard.off('keydown', this._onAdvance, this);
-        this.input.off('pointerdown', this._onAdvance, this);
+    // Limpiamos listeners para no acumular handlers entre partidas
+    this.input.keyboard.off('keydown', this._onAdvance, this);
+    this.input.off('pointerdown', this._onAdvance, this);
 
-        this.tweens.add({
-            targets: this.cameras.main, alpha: 0, duration: 300,
-            onComplete: () => {
-                // Caso 1: Flujo del Coach (Usa el bus de eventos)
-                if (this.onFinishEvent) {
-                    const combatScene = this.scene.get('CombatScene');
-                    if (combatScene) combatScene.events.emit(this.onFinishEvent);
-                    this.scene.stop('DialogueScene');
-                } 
-                // Caso 2: Flujo de Resurrección / Final (Usa enrutamiento directo de escena)
-                // 🔥 ¡ESTO EVITA EL PANTALLAZO GRIS!
-                else {
-                    this.scene.start(this.nextScene, this.nextData);
-                }
-            },
-        });
-    }
+    this.tweens.add({
+        targets: this.cameras.main, alpha: 0, duration: 300,
+        onComplete: () => {
+            // Un solo camino: nextScene siempre lleva los datos correctos.
+            // onFinishEvent eliminado como canal principal para evitar
+            // listeners huérfanos que rompan el round en segunda partida.
+            if (this.nextScene) {
+                this.scene.start(this.nextScene, this.nextData ?? {});
+            }
+            // Fallback de seguridad si por alguna razón no hay nextScene
+            else if (this.onFinishEvent) {
+                const target = this.scene.get('CombatScene');
+                if (target) target.events.emit(this.onFinishEvent);
+            }
+            this.scene.stop('DialogueScene');
+        },
+    });
+}
 }

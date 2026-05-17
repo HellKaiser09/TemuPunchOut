@@ -174,13 +174,28 @@ La transición segura y el desembarco en la escena de pelea.
 Importancia
 CRÍTICA. Es la válvula de escape que inicia el juego real.
 ------------------------------------------- */
+    /* ---------------------------------------------
+¿Qué hace?
+Limpia los escuchadores de teclado y mouse de la escena para que no se queden duplicados en memoria, ejecuta un fade out negro y arranca el ring de boxeo.
+------------------------------------------- */
     _irACombate() {
         this.input.keyboard.off('keydown', this._onAdvance, this);
         this.input.off('pointerdown', this._onAdvance, this);
 
         this.cameras.main.fade(500, 0, 0, 0);
         this.cameras.main.once('camerafadeoutcomplete', () => {
-            this.scene.start('CombatScene');
+            
+            // 🔥 SELLO HERMÉTICO: En lugar de llamar a CombatScene vacío, 
+            // forzamos el envío de las variables de la ronda inicial. 
+            // Esto aniquila cualquier intento de Phaser de reciclar el Round 3.
+            const partidaLimpia = {
+                currentRound: 1,
+                nemesisRevived: false,
+                savedPatientHp: 150,
+                pendingBuff: null
+            };
+
+            this.scene.start('CombatScene', partidaLimpia);
         });
     }
 }

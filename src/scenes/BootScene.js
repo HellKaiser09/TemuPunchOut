@@ -95,6 +95,7 @@ export class BootScene extends Phaser.Scene {
     }
 
     create() {
+
         // Registrar animaciones globales una sola vez al iniciar el juego
         this.anims.create({
             key: 'enemigo_batazo_izq',

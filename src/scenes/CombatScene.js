@@ -156,51 +156,72 @@ Construye los elementos del ring de boxeo: instancia los personajes lógicos, as
         this.audioSystem.playBGM('bgm_pelea');
         this.audioSystem.playInicioPelea();
 
-        // ── Coach buff ────────────────────────────────────────
-        this.events.off('coach-buff-chosen');
-        this.events.on('coach-buff-chosen', (buffId) => {
-            this.currentRound++;
-            this.scene.restart({
-                currentRound:   this.currentRound,
-                savedPatientHp: this.paciente.hp,
-                nemesisRevived: this.nemesisRevived,
-                pendingBuff:    buffId
-            });
-        });
-
         // ── UI ────────────────────────────────────────────────
-        this.add.text(50, 30, `Paciente (Round ${this.currentRound}):`, {
-            font: '16px Arial', fill: '#fff'
-        });
-        this.pacienteHPbar = this.add.rectangle(50, 55, 250, 20, 0x00ff00).setOrigin(0, 0.5);
-        this.pacienteHPbar.setSize((this.paciente.hp / 150) * 250, 20);
+   this.buffSystem  = new BuffSystem(this, this.paciente, this.nemesis);
 
-        this.add.text(50, 85, 'SÚPER:', { font: '12px monospace', fill: '#00ffff' });
-        this.superBar = this.add.rectangle(100, 92, 0, 10, 0x00ffff).setOrigin(0, 0.5);
-        this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
+        this.audioSystem = new AudioSystem(this);
 
-        this.add.text(W - 300, 30,
+        this.audioSystem.playBGM('bgm_pelea');
+
+        this.audioSystem.playInicioPelea();
+
+        // ── 🎨 RENDER VISUAL DEL NUEVO HUD ROUNDED ──
+
+        const topY = 70;          
+
+        const barW = 450;        
+
+        const barH = 38;          
+
+        const cornerRadius = 18;  
+
+        // 🔥 Aquí definimos hudConfig para que _refreshCombatUI no crashee
+
+        this.hudConfig = { topY, barW, barH, cornerRadius, W }
+
+        this.avatarJugador = this.add.image(90, topY, 'paciente_caras', 0).setScale(0.5).setDepth(15);
+
+        this.avatarEnemigo = this.add.image(W - 90, topY, 'hamburguesa_golpe_izq', 0).setScale(0.18).setDepth(15);
+
+        this.graphicsHPJugador = this.add.graphics().setDepth(14);
+
+        this.graphicsHPEnemigo = this.add.graphics().setDepth(14);
+        // Textos identificadores de barras
+
+        this.add.text(150, 25, `Paciente (Round ${this.currentRound}):`, { font: '16px Arial', fill: '#fff' }).setDepth(15);
+
+        this.add.text(W - 150, 25,
+
             this.nemesisRevived ? 'AUTONÉMESIS (💥 IRA CONSCIENTE)' : 'AutoNémesis',
+
             { font: '16px Arial', fill: '#fff' }
+
         ).setOrigin(1, 0).setDepth(15);
 
-        // 3. Barra del medidor Súper (Acomodada estéticamente abajo del retrato)
+        // Nuevo posicionamiento de la Barra de Súper alineada con el Portrait
+
         this.add.text(150, 95, 'SÚPER:', { font: '12px monospace', fill: '#00ffff' }).setDepth(15);
+
         this.superBar = this.add.rectangle(210, 101, 0, 10, 0x00ffff).setOrigin(0, 0.5).setDepth(15);
-        this.superBar.setSize((this.paciente.superMeter / 100) * 150, 10);
+
+        // 🔥 PEGA ESTO AQUÍ: Recreación de los textos flotantes que se borraron
 
         if (this.nemesisRevived) {
-            this.nemesis.hp = 60;
-            this.nemesis.attackTimer.delay = 2500;
-        }
 
+            this.nemesis.hp = 60;
+
+            this.nemesis.attackTimer.delay = 2500;
+
+        }
         this.infoText = this.add.text(W / 2, 20, '', { font: '18px monospace', fill: '#ffff00' }).setOrigin(0.5);
         this.countdownText = this.add.text(W / 2, 60, '', { font: '48px Arial', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5).setVisible(false);
         this.alertText = this.add.text(W / 2, 110, '', { font: '22px Arial', fill: '#ff3333', fontStyle: 'bold' }).setOrigin(0.5);
-
         this.buffHintText = this.add.text(W / 2, H - 40, '', {
+
             fontFamily: 'Arial, sans-serif', fontSize: '26px', color: '#ffd700', fontStyle: 'italic', align: 'center',
+
         }).setOrigin(0.5).setDepth(20);
+
 
         // ── Buff pendiente ────────────────────────────────────
         const registryPendingBuff = this.registry.get('pendingBuff');
@@ -467,11 +488,11 @@ Enrutador estratégico del juego. Decide si mandarte a la pantalla de KO o levan
             this.paciente.state = 'CINEMATIC';
             this.buffSystem.tickRound();
 
-            this.pendingCoachData = {
+            const coachData = {
                 currentRound: this.currentRound + 1,
                 playerHp: this.paciente.hp,
-                playerMaxHp: this.paciente.maxHp,
-                playerEnergy: this.paciente.superMeter
+                playerMaxHp: this.paciente.maxHp || 150, 
+                playerEnergy: this.paciente.superMeter || 0
             };
 
             const lineasIntermedio = [
@@ -483,7 +504,8 @@ Enrutador estratégico del juego. Decide si mandarte a la pantalla de KO o levan
             this.cameras.main.once('camerafadeoutcomplete', () => {
                 this.scene.start('DialogueScene', {
                     lines: lineasIntermedio,
-                    onFinishEvent: 'dialogue-next-coach'
+                    nextScene: 'CoachScene',
+                    nextData: coachData
                 });
             });
         } else if (this.currentRound === 3) {
