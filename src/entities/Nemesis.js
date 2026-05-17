@@ -6,6 +6,7 @@ export class Nemesis extends Phaser.GameObjects.Rectangle {
         this.scene    = scene;
         this.hp       = 100;
         this.maxHp    = 100;
+        this.damage   = 10;
         this.state    = "IDLE";
         this.baseX    = x;
         this.baseY    = y;

@@ -1,6 +1,6 @@
 import { Paciente } from '../entities/Paciente.js';
 import { Nemesis } from '../entities/Nemesis.js';
-import { BuffSystem } from '../systems/BuffSystem.js';
+import { BuffSystem, BUFF_CATALOG } from '../systems/BuffSystem.js';
 
 /**
  * Escena principal del bucle de combate.
@@ -103,6 +103,14 @@ export class CombatScene extends Phaser.Scene {
             font: '13px monospace', fill: '#e5e7eb', wordWrap: { width: 900 }
         }).setOrigin(0, 0);
 
+        this.buffInfoText = this.add.text(width / 2 - 445, height - 48, '', {
+            font: '12px monospace', fill: '#a8ffc4', wordWrap: { width: 900 }
+        }).setOrigin(0, 0);
+
+        this.debuffInfoText = this.add.text(width / 2 - 445, height - 30, '', {
+            font: '12px monospace', fill: '#ffbbba', wordWrap: { width: 900 }
+        }).setOrigin(0, 0);
+
         // FLUJO DE INTERCEPCIÓN: Aplicar el modificador lógicamente en el nuevo ciclo de vida
         if (this.pendingBuff) {
             console.log(`[SISTEMA] Activando efectos de: ${this.pendingBuff} para el Round ${this.currentRound}`);
@@ -139,27 +147,38 @@ export class CombatScene extends Phaser.Scene {
         if (!this.buffLineText || !this.debuffLineText || !this.statsLineText || !this.buffSystem || !this.paciente || !this.nemesis) return;
 
         const active = this.buffSystem.getActiveBuffs();
-        const toLabel = (mod) => {
-            const side = mod.targetKey === 'enemy' ? 'NEMESIS' : 'PACIENTE';
-            const rounds = typeof mod.rounds === 'number' ? `${mod.rounds}r` : 'inst';
-            if (mod.type === 'immunity') return `${side}:inmune(${mod.value}, ${rounds})`;
-            if (mod.type === 'block') return `${side}:bloquea(${mod.value}, ${rounds})`;
-            if (mod.type === 'on_hit') return `${side}:on_hit(${rounds})`;
-            const stat = mod.effect?.stat ?? 'stat';
-            return `${side}:${stat}(${rounds})`;
-        };
-
         const buffMods = active.filter(mod => mod.sourceTag !== 'debuff');
         const debuffMods = active.filter(mod => mod.sourceTag === 'debuff' || mod.targetKey === 'enemy');
-        
-        const buffLine = buffMods.length ? buffMods.map(toLabel).join(' | ') : 'ninguno';
-        const debuffLine = debuffMods.length ? debuffMods.map(toLabel).join(' | ') : 'ninguno';
+
+        const uniqueSources = (mods) => {
+            const seen = new Set();
+            return mods.reduce((list, mod) => {
+                const id = mod.sourceId || mod.sourceTag || mod.type;
+                if (!seen.has(id)) {
+                    seen.add(id);
+                    list.push(id);
+                }
+                return list;
+            }, []);
+        };
+
+        const buffIds = uniqueSources(buffMods);
+        const debuffIds = uniqueSources(debuffMods);
+        const getName = (id) => BUFF_CATALOG[id]?.name ?? id;
+
+        const buffLine = buffIds.length ? buffIds.map(getName).join(' | ') : 'ninguno';
+        const debuffLine = debuffIds.length ? debuffIds.map(getName).join(' | ') : 'ninguno';
 
         this.buffLineText.setText(`BUFFS: ${buffLine}`);
         this.debuffLineText.setText(`DEBUFFS: ${debuffLine}`);
         this.statsLineText.setText(
-            `STATS: Daño Némesis ${this.nemesis.damage} | Crit Paciente ${this.paciente.critDamage}% | Bonus energía por golpe +${this._getOnHitBonus()}% | Bloqueo manipulación ${this.buffSystem.isAbilityBlocked('manipulacion') ? 'SI' : 'NO'}`
+            `STATS: Daño Némesis ${this.nemesis.damage} | Crit Paciente ${this.paciente.critDamage}% | Bonus energía por golpe +${this._getOnHitBonus()}%`
         );
+
+        const buffDescriptions = buffIds.map(id => BUFF_CATALOG[id]?.desc).filter(Boolean);
+        const debuffDescriptions = debuffIds.map(id => BUFF_CATALOG[id]?.desc).filter(Boolean);
+        this.buffInfoText.setText(buffDescriptions.length ? `INFO BUFFS: ${buffDescriptions.join(' • ')}` : '');
+        this.debuffInfoText.setText(debuffDescriptions.length ? `INFO DEBUFFS: ${debuffDescriptions.join(' • ')}` : '');
     }
 
     // ── SISTEMA DE EVENTOS OFENSIVOS DEL PROTAGONISTA ──
@@ -198,8 +217,8 @@ export class CombatScene extends Phaser.Scene {
             this.nemesis.hp -= damageCalculado;
             
             if (esCritico) {
-                this.infoText.setText(`💥 ¡CRÍTICO! Golpe ${tipo} (-${damageCalculado} HP)`);
-                this.alertText.setText('💥 CRÍTICO 💥');
+                this.infoText.setText(`¡CRÍTICO! Golpe ${tipo} (-${damageCalculado} HP)`);
+                this.alertText.setText(' CRÍTICO ');
                 this.time.delayedCall(600, () => this.alertText.setText(''));
             } else {
                 this.infoText.setText(`¡Golpe ${tipo}! (-${damageCalculado} HP)`);
@@ -264,7 +283,8 @@ export class CombatScene extends Phaser.Scene {
         if (this.paciente.hp <= 0) return;
 
         // Desglose de parámetros enviados por la IA del enemigo
-        const { tipo = 'LATERAL', direccion = 'NINGUNA', dano = 10 } = data;
+        const { tipo = 'LATERAL', direccion = 'NINGUNA' } = data;
+        let dano = data.dano ?? this.nemesis.damage ?? 10;
 
         // 🛡️ SUB-PROCESO ESPECIAL: Manejo de amenazas continuas/Obstáculos (Letreros)
         if (tipo === 'ESPECIAL') {

@@ -72,22 +72,33 @@ export class EndScene extends Phaser.Scene {
             }).setOrigin(0.5);
         }
 
-        // 🔄 TRANSICIÓN DE SALIDA: Captura el espacio para reiniciar o continuar
-        this.input.keyboard.once('keydown-SPACE', () => {
+        // 🔄 TRANSICIÓN DE SALIDA: Captura diversas entradas para reiniciar o continuar
+        this._exiting = false;
+        const finish = () => {
+            if (this._exiting) return;
+            this._exiting = true;
             // Desvanecer la pantalla a negro en 800ms
             this.cameras.main.fade(800, 0, 0, 0);
-            
-            // Al terminar el fade, destroyers el estado anterior e iniciamos el ring desde cero
+
+            // Al terminar el fade, destruimos el estado anterior e iniciamos la escena adecuada
             this.cameras.main.once('camerafadeoutcomplete', () => {
                 if (!this.victoria) {
                     // En derrota, reinicia el combate
                     this.scene.start('CombatScene');
                 } else {
-                    // En victoria, podría ir a otra escena (menú, siguiente nivel, etc.)
-                    // Por ahora reinicia desde 0
+                    // En victoria, vuelve al menú principal (BootScene)
                     this.scene.start('BootScene');
                 }
             });
+        };
+
+        // Soportar: tecla ESPACIO, ENTER, cualquier tecla y click/tap
+        this.input.keyboard.once('keydown-SPACE', finish);
+        this.input.keyboard.once('keydown-ENTER', finish);
+        this.input.keyboard.once('keydown', (e) => {
+            // Si no es una modifier key, permitimos cualquier pulsación para avanzar
+            if (e.key && e.key.length === 1) finish();
         });
+        this.input.once('pointerdown', finish);
     }
 }

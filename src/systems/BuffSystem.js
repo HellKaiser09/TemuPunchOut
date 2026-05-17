@@ -110,9 +110,11 @@ export class BuffSystem {
 
       case 'add_percent': {
         const rawBase = target.base?.[effect.stat] ?? target[effect.stat] ?? 0;
-        const delta = rawBase === 0
+        // Para curación, calcular el porcentaje sobre maxHp si está disponible
+        const baseForPercent = (effect.stat === 'hp') ? (target.maxHp ?? rawBase) : rawBase;
+        const delta = baseForPercent === 0
           ? effect.value
-          : Math.round(rawBase * (effect.value / 100));
+          : Math.round(baseForPercent * (effect.value / 100));
         if (effect.stat === 'hp') {
           target.hp = Math.min(target.maxHp, target.hp + delta);
           console.log(`[BUFF EFFECT] ${buff?.id} -> ${effect.target}.${effect.stat} +${delta} (curado)`);
@@ -125,7 +127,7 @@ export class BuffSystem {
 
       case 'mul_percent': {
         const factor = 1 + effect.value / 100;
-        this._registerModifier(effect, effectDuration, factor, target, 'mul', buff?.tag);
+        this._registerModifier(effect, effectDuration, factor, target, 'mul', buff?.tag, buff?.id);
         console.log(`[DEBUFF EFFECT] ${buff?.id} -> ${effect.target}.${effect.stat} x${factor.toFixed(2)} (${effectDuration ?? 'inst'} rounds)`);
         break;
       }
@@ -141,6 +143,7 @@ export class BuffSystem {
             target,
             targetKey,
             sourceTag: buff?.tag,
+            sourceId: buff?.id,
           });
         }
         break;
@@ -156,6 +159,7 @@ export class BuffSystem {
             target,
             targetKey,
             sourceTag: buff?.tag,
+            sourceId: buff?.id,
           });
         }
         break;
@@ -181,6 +185,7 @@ export class BuffSystem {
             target,
             targetKey,
             sourceTag: buff?.tag,
+            sourceId: buff?.id,
           });
         }
         break;
@@ -207,10 +212,10 @@ export class BuffSystem {
     this._syncRegistry();
   }
 
-  _registerModifier(effect, duration, delta, target, mode = 'add', sourceTag = null) {
+  _registerModifier(effect, duration, delta, target, mode = 'add', sourceTag = null, sourceId = null) {
     const targetKey = target === this.player ? 'self' : 'enemy';
     const originalValue = target[effect.stat] ?? (mode === 'mul' ? 1 : 0);
-    const mod = { effect, duration, delta, target, targetKey, mode, rounds: duration, sourceTag, originalValue };
+    const mod = { effect, duration, delta, target, targetKey, mode, rounds: duration, sourceTag, sourceId, originalValue };
     this.activeBuffs.push(mod);
 
     if (mode === 'add') {
@@ -259,6 +264,7 @@ export class BuffSystem {
       mode: mod.mode,
       rounds: mod.rounds,
       sourceTag: mod.sourceTag,
+      sourceId: mod.sourceId,
       value: mod.value,
       marker: mod.marker,
       targetKey: mod.targetKey,
