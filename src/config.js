@@ -3,7 +3,7 @@ import { MenuScene }    from './scenes/MenuScene.js';
 import { DialogueScene } from './scenes/DialogueScene.js';
 import { CombatScene }  from './scenes/CombatScene.js';
 import { EndScene }     from './scenes/EndScene.js';
-import  CoachScene      from './scenes/CoachScene.js';
+import  CoachScene       from './scenes/CoachScene.js';
 import { TutorialScene } from './scenes/TutorialScene.js';
 export const config = {
     type: Phaser.AUTO,
@@ -18,7 +18,7 @@ export const config = {
             debug: false
         }
     },
-    scene: [BootScene, MenuScene, CombatScene, DialogueScene,TutorialScene , CoachScene, EndScene]
+    scene: [BootScene, MenuScene, CombatScene, DialogueScene, CoachScene, EndScene]
 };
 
 
