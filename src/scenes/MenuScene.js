@@ -10,6 +10,7 @@ export class MenuScene extends Phaser.Scene {
         // 🖼️ ANCLAJE DEL ARTE FINAL: Renderiza el fondo centrado y adaptado al tamaño del lienzo
         if (this.textures.exists('bg_menu')) {
             this.add.image(W / 2, H / 2, 'bg_menu').setDisplaySize(W, H);
+            this.add.image(W * 0.67, H * 0.54, 'coach_character_menu').setOrigin(0.44);
         } else {
             // Respado elegante por si el asset no se ha cargado en BootScene
             this.add.rectangle(W / 2, H / 2, W, H, 0x111122); 

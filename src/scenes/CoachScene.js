@@ -19,11 +19,13 @@ export default class CoachScene extends Phaser.Scene {
 
         // 1.FONDO Y PERSONAJE (Ya alineados por tus diseñadores)
         // Colocamos el fondo del ring y al Coach a la derecha de la pantalla
-        this.add.image(W / 2, H / 2, 'bg_menu_tutorial').setDisplaySize(W, H).setAlpha(0.9);
-        //this.add.image(W * 0.75, H * 0.55, 'coach_character').setOrigin(0.5);
-
+        this.add.image(W / 2, H / 2, 'bg_menu_tutorial').setDisplaySize(W, H);
+        
         // Cortina oscura sutil para que el texto de la izquierda sea ultra legible
         this.add.rectangle(0, 0, W, H, 0x000000, 0.35).setOrigin(0);
+
+        this.add.image(W * 0.57, H * 0.50, 'coach_eleccion').setOrigin(0.4).setScale(1.22);
+
 
         // Contenedor principal para la lista de respuestas interactivas
         this.contenedorOpciones = this.add.container(0, 0).setAlpha(0);

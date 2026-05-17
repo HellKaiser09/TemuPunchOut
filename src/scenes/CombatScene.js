@@ -29,6 +29,9 @@ export class CombatScene extends Phaser.Scene {
 
     // ── INICIALIZACIÓN DE ASSETS Y ELEMENTOS DEL RING ──
     create() {
+        const W = this.scale.width;
+        const H = this.scale.height;
+        this.add.image(W / 2, H / 2, 'fondo_pelea').setDisplaySize(W, H)
         // Transición cinematográfica de entrada suave
         this.cameras.main.fadeIn(500, 0, 0, 0);
         
