@@ -47,11 +47,10 @@ Dibuja exclusivamente los gráficos, colores y textos de la pantalla de "Game Ov
 Dibuja exclusivamente los gráficos, colores y textos de la pantalla de éxito al terminar el juego.
 ------------------------------------------- */
     _pintarVictoria(width, height) {
-        this.add.rectangle(width / 2, height / 2, width, height, 0x001a4d);
-        this.add.text(width / 2, height / 2 - 80, '✦ VICTORIA ✦', { font: '80px Impact', fill: '#ffdd00', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5);
-        this.add.text(width / 2, height / 2 - 10, '¡Has conquistado tus demonios internos!', { font: '20px Arial', fill: '#00ffff', fontStyle: 'italic' }).setOrigin(0.5);
-        this.add.text(width / 2, height / 2 + 50, '🏆 Has avanzado en tu camino de sanación 🏆', { font: '18px Arial', fill: '#ffaa00' }).setOrigin(0.5);
-        this.add.text(width / 2, height / 2 + 140, 'Presiona [ESPACIO] o da CLICK para continuar', { font: '16px monospace', fill: '#00ff88' }).setOrigin(0.5);
+        this.add.image(width / 2, height / 2, 'Fondo_victoria').setOrigin(0.5).setDisplaySize(width, height);
+        const leftX = 40;
+        this.add.text(leftX, height - 120, '✦ VICTORIA ✦', { font: '96px Impact', fill: '#ffdd00', stroke: '#000', strokeThickness: 6 }).setOrigin(0, 1);
+        this.add.text(leftX, height - 40, 'Presiona [ESPACIO] o da CLICK para continuar', { font: '22px monospace', fill: '#00ff88' }).setOrigin(0, 1);
     }
 
 /* ---------------------------------------------

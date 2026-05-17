@@ -87,6 +87,15 @@ export class BootScene extends Phaser.Scene {
         this.load.image('bloqueo2', 'src/assets/sprites/bloqeo2.png');
         this.load.image('bloqueo3', 'src/assets/sprites/bloqeo3.png');
         this.load.image('bloqueo4', 'src/assets/sprites/bloqeo4.png');
+        
+        this.load.image('final1', 'src/assets/sprites/final1.png');
+        this.load.image('final2', 'src/assets/sprites/final2.png');
+        this.load.image('final3', 'src/assets/sprites/final3.png');
+        this.load.image('final4', 'src/assets/sprites/final4.png');
+        this.load.image('final5', 'src/assets/sprites/final5.png');
+        this.load.image('final6', 'src/assets/sprites/final6.png');
+        this.load.image('final7', 'src/assets/sprites/final7.png');
+        this.load.image('final8', 'src/assets/sprites/final8.png');
 
 
         //victoria final
